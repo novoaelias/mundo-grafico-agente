@@ -108,6 +108,21 @@ def test_los_numeros_de_pedido_son_correlativos(conexion):
     assert sorted(numeros) == ["MG-0001", "MG-0002", "MG-0003"]
 
 
+def test_estado_pago_por_defecto_es_a_cobrar(conexion):
+    pedido = pedidos.crear_pedido(
+        conexion, "conv-1", [{"producto": "sello", "cantidad": 1}], hoy=date(2026, 9, 21),
+    )
+    assert pedido["estado_pago"] == "a_cobrar"
+
+
+def test_estado_pago_se_puede_fijar_al_crear(conexion):
+    pedido = pedidos.crear_pedido(
+        conexion, "conv-1", [{"producto": "sello", "cantidad": 1}], hoy=date(2026, 9, 21),
+        estado_pago="señado",
+    )
+    assert pedido["estado_pago"] == "señado"
+
+
 def test_sin_productos_reconocidos_no_crea_nada(conexion):
     with pytest.raises(pedidos.PedidoInvalido):
         pedidos.crear_pedido(

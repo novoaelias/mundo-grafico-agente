@@ -9,6 +9,7 @@ from langchain_core.tools import tool
 from .. import agenda, base_datos, horario, sheets
 from .. import catalogo as motor
 from .. import pedidos as datos
+from ..config import ESTADO_PAGO_INICIAL
 from ._contexto import conversacion_de, obtener as contexto
 
 
@@ -90,6 +91,7 @@ def crear_pedido(items: list[dict], como_paga: str, config: RunnableConfig) -> s
                 telefono_cliente=contacto["telefono"],
                 contacto_id=contacto["contacto_id"],
                 notas=como_paga,
+                estado_pago=ESTADO_PAGO_INICIAL.get(ctx.negocio.politica_pago, "a_cobrar"),
             )
         except datos.PedidoInvalido as e:
             return str(e)

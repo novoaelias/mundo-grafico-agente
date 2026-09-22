@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from datetime import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -20,6 +19,17 @@ RAIZ = Path(__file__).resolve().parents[2]
 load_dotenv(RAIZ / ".env")
 
 POLITICAS_DE_PAGO_VALIDAS = ("retiro", "sena_50", "adelantado_100")
+
+# Con qué estado de pago nace un pedido nuevo, según la política vigente.
+# Sin una pasarela de pago integrada todavía, esto no VERIFICA que el
+# cobro entró de verdad — es una foto de lo que se acordó en la charla,
+# y asume que el bot (guiado por prompts/sistema.md) no cierra el pedido
+# hasta confirmar lo que corresponda. Lo usa herramientas/pedidos.py.
+ESTADO_PAGO_INICIAL = {
+    "retiro": "a_cobrar",
+    "sena_50": "señado",
+    "adelantado_100": "pagado",
+}
 
 
 class ErrorDeConfiguracion(Exception):
@@ -32,11 +42,10 @@ class ConfigNegocio:
 
     nombre: str = "Mundo Gráfico"
     direccion: str = "Laferrere"
-    horario_apertura: time = time(9, 0)
-    horario_cierre: time = time(18, 0)
-    # Política de pago para tomar un pedido nuevo. Se cambia acá y en el
-    # panel de Taller sin tocar el prompt: el prompt solo dice "seguí la
-    # política vigente" y la herramienta crear_pedido aplica la de verdad.
+    # Determina con qué estado_pago nace un pedido (ver ESTADO_PAGO_INICIAL
+    # más abajo). OJO: prompts/sistema.md no lee esta variable — es texto
+    # plano — así que cambiarla acá y no actualizar la sección 4 de ese
+    # archivo deja al bot hablando de una política que ya no rige.
     politica_pago: str = "retiro"
 
 
@@ -90,8 +99,6 @@ class Config:
             negocio=ConfigNegocio(
                 nombre=(os.getenv("MG_NOMBRE") or "Mundo Gráfico").strip(),
                 direccion=(os.getenv("MG_DIRECCION") or "Laferrere").strip(),
-                horario_apertura=_hora("MG_HORARIO_APERTURA", time(9, 0)),
-                horario_cierre=_hora("MG_HORARIO_CIERRE", time(18, 0)),
                 politica_pago=politica,
             ),
             panel=ConfigPanel(
@@ -104,18 +111,3 @@ class Config:
                 nombre_pestaña=(os.getenv("GOOGLE_SHEETS_PESTAÑA") or "Ventas").strip(),
             ),
         )
-
-
-def _hora(nombre: str, por_defecto: time) -> time:
-    valor = (os.getenv(nombre) or "").strip()
-    if not valor:
-        return por_defecto
-    try:
-        partes = [int(p) for p in valor.split(":")]
-        while len(partes) < 2:
-            partes.append(0)
-        return time(partes[0], partes[1])
-    except (ValueError, IndexError):
-        raise ErrorDeConfiguracion(
-            f"{nombre} tiene que ser HH:MM, no '{valor}'."
-        ) from None

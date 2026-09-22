@@ -189,8 +189,37 @@ def test_crear_pedido_usa_el_contacto_de_chatwoot_y_arma_el_texto(monkeypatch, c
     assert capturado["conversacion_id"] == "conv-77"
     assert capturado["nombre_cliente"] == "Marisa"
     assert capturado["notas"] == "paga al retirar"
+    assert capturado["estado_pago"] == "a_cobrar", "con politica_pago='retiro' (default) nace a cobrar"
     assert "MG-0001" in texto
     assert "$9.000" in texto
+
+
+def test_crear_pedido_aplica_el_estado_de_pago_segun_la_politica_vigente(monkeypatch):
+    capturado = {}
+
+    def crear_falso(conexion, **kwargs):
+        capturado.update(kwargs)
+        from mundografico.agenda import ResultadoAgenda
+        return {
+            "id": 1, "numero": "MG-0002", "total": 4500,
+            "cliente": {"nombre": "Beto", "telefono": ""},
+            "agenda": ResultadoAgenda(fecha_promesa=date(2026, 9, 22), minutos_por_dia={}, desde=date(2026, 9, 22)),
+        }
+
+    monkeypatch.setattr(datos, "crear_pedido", crear_falso)
+    _contexto._reemplazar_para_tests(
+        _contexto.Contexto(
+            chatwoot=ChatwootFalso(), negocio=ConfigNegocio(politica_pago="sena_50"),
+            sheets=ConfigSheets(), etiqueta_humano="humano",
+        )
+    )
+
+    crear_pedido.invoke(
+        {"items": [{"producto": "lona", "cantidad": 1}], "como_paga": "señó el 50%"},
+        config=CONFIG,
+    )
+
+    assert capturado["estado_pago"] == "señado"
 
 
 def test_crear_pedido_invalido_devuelve_el_motivo_sin_reventar(monkeypatch):

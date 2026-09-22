@@ -229,6 +229,7 @@ def crear_pedido(
     telefono_cliente: str = "",
     contacto_id: str = "",
     notas: str = "",
+    estado_pago: str = "a_cobrar",
 ) -> dict:
     """Cotiza, calcula la fecha y guarda el pedido, todo en una transacción.
 
@@ -242,6 +243,12 @@ def crear_pedido(
     tiempo reserven el mismo hueco de agenda: sin el candado, los dos
     leerían "hoy hay 60 minutos libres" a la vez y los dos los usarían.
     Se libera solo, al terminar la transacción.
+
+    `estado_pago` lo decide quien llama (la herramienta `crear_pedido`,
+    según `POLITICA_PAGO` del .env) — esta función no sabe nada de
+    políticas de negocio, solo guarda el estado que le pasan. Sin un
+    cobro real integrado todavía, es una foto de lo que se acordó en la
+    charla, no una verificación de que el pago entró de verdad.
     """
     conexion.execute("SELECT pg_advisory_xact_lock(%s)", (_LLAVE_AGENDA,))
 
@@ -281,14 +288,14 @@ def crear_pedido(
         """
         INSERT INTO mundografico.pedidos
             (numero, cliente_id, conversacion_id, detalle, total,
-             minutos_estimados, fecha_promesa, notas)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+             minutos_estimados, fecha_promesa, notas, estado_pago)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
         """,
         (
             numero, cliente["id"], conversacion_id, _a_jsonb(detalle),
             cotizacion.total, cotizacion.minutos_totales,
-            resultado_agenda.fecha_promesa, notas,
+            resultado_agenda.fecha_promesa, notas, estado_pago,
         ),
     ).fetchone()
 
