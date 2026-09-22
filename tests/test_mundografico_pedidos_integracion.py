@@ -243,6 +243,37 @@ def test_marcar_listo_dos_veces_avisa(conexion):
 # -- Catálogo desde el panel ------------------------------------------------------
 
 
+def test_producto_nuevo_guarda_escalas_como_array_json_no_como_objeto(conexion):
+    """Sin Json() de por medio, psycopg adapta una lista de Python como
+    ARRAY de Postgres, no como jsonb, y una lista vacía termina guardada
+    como '{}' (objeto vacío) en vez de '[]' (array vacío) — no se nota
+    hoy porque todo el código lee escalas con `or []`, pero un tramo de
+    verdad ([{"desde": ...}]) con ese bug de vuelta directamente revienta
+    al guardar."""
+    producto = pedidos.crear_producto(conexion, {
+        "nombre": "Imán de heladera", "precio_unitario": 500,
+    })
+    conexion.commit()
+
+    tipo = conexion.execute(
+        "SELECT jsonb_typeof(escalas) AS tipo FROM mundografico.productos WHERE id = %s",
+        (producto["id"],),
+    ).fetchone()["tipo"]
+
+    assert tipo == "array"
+
+
+def test_actualizar_producto_con_escalas_de_verdad_no_revienta(conexion):
+    id_sello = id_de_producto(conexion, "Sello automático")
+
+    actualizado = pedidos.actualizar_producto(conexion, id_sello, {
+        "escalas": [{"desde": 10, "precio_unitario": 6000}],
+    })
+    conexion.commit()
+
+    assert actualizado["escalas"] == [{"desde": 10, "precio_unitario": 6000}]
+
+
 def test_actualizar_precio_apaga_precio_provisorio(conexion):
     id_sello = id_de_producto(conexion, "Sello automático")
 

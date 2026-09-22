@@ -65,6 +65,16 @@ def actualizar_producto(conexion: Connection, producto_id: int, cambios: dict[st
     if "precio_unitario" in a_aplicar and "precio_provisorio" not in a_aplicar:
         a_aplicar["precio_provisorio"] = False
 
+    if "escalas" in a_aplicar:
+        # Sin este envoltorio, psycopg adapta una lista de Python como
+        # ARRAY de Postgres, no como jsonb: con la lista vacía de hoy no
+        # se nota (guarda '{}', que como jsonb es un objeto vacío, no un
+        # array, pero como acá siempre se lee con `or []` da lo mismo) —
+        # el día que esto tenga tramos de verdad ([{"desde":..., ...}]),
+        # sin el Json() psycopg no sabe adaptar una lista de diccionarios
+        # y revienta.
+        a_aplicar["escalas"] = _a_jsonb(a_aplicar["escalas"])
+
     columnas = ", ".join(f"{c} = %({c})s" for c in a_aplicar)
     fila = conexion.execute(
         f"""
@@ -101,7 +111,7 @@ def crear_producto(conexion: Connection, datos: dict[str, Any]) -> dict:
             "unidad": datos.get("unidad") or "unidad",
             "precio_unitario": datos["precio_unitario"],
             "cantidad_minima": datos.get("cantidad_minima") or 1,
-            "escalas": datos.get("escalas") or [],
+            "escalas": _a_jsonb(datos.get("escalas") or []),
             "minutos_preparacion": datos.get("minutos_preparacion") or 0,
             "minutos_por_unidad": datos.get("minutos_por_unidad") or 0,
             "precio_provisorio": datos.get("precio_provisorio", False),
