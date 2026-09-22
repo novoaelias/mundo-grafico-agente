@@ -29,6 +29,12 @@ from difflib import SequenceMatcher
 UMBRAL_DE_PARECIDO = 0.55
 
 
+def formato_dinero(monto: float) -> str:
+    """"$12.500", con punto de miles y sin decimales — así se habla la
+    plata en una charla de WhatsApp, no como la devuelve Python."""
+    return f"${monto:,.0f}".replace(",", ".")
+
+
 @dataclass
 class ItemCotizado:
     producto_id: int
@@ -60,7 +66,7 @@ class Cotizacion:
         for item in self.items:
             lineas.append(
                 f"- {item.cantidad:g} {item.unidad} de {item.nombre}: "
-                f"${item.subtotal:,.0f}".replace(",", ".")
+                f"{formato_dinero(item.subtotal)}"
                 + (f" ({item.aviso})" if item.aviso else "")
             )
 
@@ -68,7 +74,7 @@ class Cotizacion:
             lineas.append(f"- No encontré '{nombre}' en el catálogo.")
 
         if self.items:
-            lineas.append(f"Total: ${self.total:,.0f}".replace(",", "."))
+            lineas.append(f"Total: {formato_dinero(self.total)}")
 
         return "\n".join(lineas)
 

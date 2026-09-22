@@ -6,8 +6,14 @@
 -- dueño, se reemplazan desde el panel (pestaña Catálogo) o volviendo a
 -- correr un UPDATE — no hace falta tocar código ni reiniciar nada.
 --
--- Las escalas de precio son un ejemplo de la forma, no el descuento real:
--- ese también lo define el dueño.
+-- Convención importante, la misma que usa catalogo.py: `cantidad` es
+-- SIEMPRE la unidad física real que dice la persona (tarjetas sueltas,
+-- hojas, metros cuadrados) — nunca "cientos" ni ningún otro múltiplo. Por
+-- eso `precio_unitario` de las tarjetas es el precio de UNA tarjeta, y las
+-- escalas de cantidad están en unidades sueltas (`desde: 500` = 500
+-- tarjetas, no 5 cientos). Mezclar esa convención sería la forma más común
+-- de que el bot cotice diez veces mal sin que se note en una lectura
+-- rápida del código.
 
 SET search_path TO mundografico;
 
@@ -15,7 +21,7 @@ INSERT INTO productos
     (nombre, alias, categoria, unidad, precio_unitario, cantidad_minima,
      escalas, minutos_preparacion, minutos_por_unidad, precio_provisorio)
 VALUES
-    -- --- Lonas -------------------------------------------------------------
+    -- --- Lonas (unidad = m2) -------------------------------------------------
     ('Lona banner', ARRAY['lona', 'banner', 'cartel', 'gigantografia', 'gigantografía'],
      'lonas', 'm2', 4500, 1,
      '[{"desde": 5, "precio_unitario": 4000}, {"desde": 15, "precio_unitario": 3600}]',
@@ -26,22 +32,22 @@ VALUES
      '[{"desde": 5, "precio_unitario": 4700}]',
      25, 9, TRUE),
 
-    -- --- Tarjetería ----------------------------------------------------------
+    -- --- Tarjetería y volantes (unidad = unidad suelta) -----------------------
+    -- Mínimo 100: no tiene sentido de producción imprimir menos que eso.
     ('Tarjetas personales', ARRAY['tarjetas', 'tarjetas personales', 'business cards'],
-     'tarjeteria', 'ciento', 3500, 1,
-     '[{"desde": 5, "precio_unitario": 3000}, {"desde": 10, "precio_unitario": 2600}]',
-     30, 2, TRUE),
+     'tarjeteria', 'unidad', 35, 100,
+     '[{"desde": 500, "precio_unitario": 30}, {"desde": 1000, "precio_unitario": 26}]',
+     30, 0.05, TRUE),
 
-    -- --- Volantes y folletos --------------------------------------------------
     ('Volantes A6', ARRAY['volantes', 'flyers', 'volante'],
-     'volantes', 'ciento', 1800, 1,
-     '[{"desde": 5, "precio_unitario": 1500}, {"desde": 20, "precio_unitario": 1200}]',
-     20, 0.6, TRUE),
+     'volantes', 'unidad', 18, 100,
+     '[{"desde": 500, "precio_unitario": 15}, {"desde": 2000, "precio_unitario": 12}]',
+     20, 0.03, TRUE),
 
     ('Folletos A5 dípticos', ARRAY['folletos', 'dipticos', 'dípticos', 'triptico', 'tríptico'],
-     'volantes', 'ciento', 4200, 1,
-     '[{"desde": 5, "precio_unitario": 3800}]',
-     25, 1.2, TRUE),
+     'volantes', 'unidad', 42, 100,
+     '[{"desde": 500, "precio_unitario": 38}]',
+     25, 0.08, TRUE),
 
     -- --- Sellos ---------------------------------------------------------------
     ('Sello automático', ARRAY['sello', 'sellos', 'sello automatico', 'sello automático'],
@@ -49,18 +55,18 @@ VALUES
 
     -- --- Stickers ---------------------------------------------------------------
     ('Stickers troquelados', ARRAY['stickers', 'calcomanias', 'calcomanías', 'adhesivos'],
-     'stickers', 'ciento', 5000, 1,
-     '[{"desde": 3, "precio_unitario": 4500}, {"desde": 10, "precio_unitario": 3900}]',
-     30, 3, TRUE),
+     'stickers', 'unidad', 50, 100,
+     '[{"desde": 300, "precio_unitario": 45}, {"desde": 1000, "precio_unitario": 39}]',
+     30, 0.15, TRUE),
 
-    -- --- Impresiones sueltas ------------------------------------------------
+    -- --- Impresiones sueltas (sin mínimo: se pide de a una) -------------------
     ('Impresión B/N A4', ARRAY['impresion blanco y negro', 'fotocopia', 'copia', 'impresion'],
      'impresiones', 'unidad', 80, 1, '[]', 2, 0.15, TRUE),
 
     ('Impresión color A4', ARRAY['impresion color', 'copia color'],
      'impresiones', 'unidad', 250, 1, '[]', 2, 0.2, TRUE),
 
-    -- --- Plotteo / vinilo ----------------------------------------------------
+    -- --- Plotteo / vinilo (unidad = m2) ---------------------------------------
     ('Plotteo de corte (vinilo)', ARRAY['plotteo', 'vinilo', 'calado', 'letras en vinilo'],
      'plotteo', 'm2', 6000, 1,
      '[{"desde": 3, "precio_unitario": 5400}]',
