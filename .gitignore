@@ -39,3 +39,7 @@ datos/
 *.db
 *.sqlite3
 _vista-previa.html
+
+# Mundo Gráfico
+.venv/
+credenciales-google.json
