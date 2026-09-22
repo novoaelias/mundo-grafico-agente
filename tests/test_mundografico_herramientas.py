@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from mundografico import base_datos  # noqa: E402
 from mundografico import pedidos as datos  # noqa: E402
-from mundografico.config import ConfigNegocio  # noqa: E402
+from mundografico.config import ConfigNegocio, ConfigSheets  # noqa: E402
 from mundografico.herramientas import _contexto  # noqa: E402
 from mundografico.herramientas.humano import pasar_a_humano  # noqa: E402
 from mundografico.herramientas.pedidos import (  # noqa: E402
@@ -89,7 +89,10 @@ def contexto_de_prueba(monkeypatch):
     monkeypatch.setattr(base_datos, "obtener_pool", lambda: PoolFalso())
     chatwoot = ChatwootFalso()
     _contexto._reemplazar_para_tests(
-        _contexto.Contexto(chatwoot=chatwoot, negocio=ConfigNegocio(), etiqueta_humano="humano")
+        _contexto.Contexto(
+            chatwoot=chatwoot, negocio=ConfigNegocio(), sheets=ConfigSheets(),
+            etiqueta_humano="humano",
+        )
     )
     return chatwoot
 
@@ -169,8 +172,10 @@ def test_crear_pedido_usa_el_contacto_de_chatwoot_y_arma_el_texto(monkeypatch, c
         capturado.update(kwargs)
         from mundografico.agenda import ResultadoAgenda
         return {
+            "id": 1,
             "numero": "MG-0001",
             "total": 9000,
+            "cliente": {"nombre": "Marisa", "telefono": "+54911..."},
             "agenda": ResultadoAgenda(fecha_promesa=date(2026, 9, 22), minutos_por_dia={}, desde=date(2026, 9, 22)),
         }
 

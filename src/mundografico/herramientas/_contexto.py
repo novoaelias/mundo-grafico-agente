@@ -18,13 +18,14 @@ from dataclasses import dataclass
 from langchain_core.runnables import RunnableConfig
 
 from ..chatwoot_api import ClienteChatwoot
-from ..config import ConfigNegocio
+from ..config import ConfigNegocio, ConfigSheets
 
 
 @dataclass
 class Contexto:
     chatwoot: ClienteChatwoot
     negocio: ConfigNegocio
+    sheets: ConfigSheets
     etiqueta_humano: str
 
 
@@ -38,12 +39,14 @@ def inicializar(
     chatwoot_cuenta_id: str,
     etiqueta_humano: str,
     negocio: ConfigNegocio,
+    sheets: ConfigSheets,
 ) -> Contexto:
     """Arma el contexto compartido. Se llama una sola vez, al arrancar."""
     global _contexto
     _contexto = Contexto(
         chatwoot=ClienteChatwoot(chatwoot_url, chatwoot_token, chatwoot_cuenta_id),
         negocio=negocio,
+        sheets=sheets,
         etiqueta_humano=(etiqueta_humano or "humano").strip().lower(),
     )
     return _contexto

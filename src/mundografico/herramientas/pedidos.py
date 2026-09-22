@@ -6,7 +6,7 @@ from __future__ import annotations
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from .. import agenda, base_datos, horario
+from .. import agenda, base_datos, horario, sheets
 from .. import catalogo as motor
 from .. import pedidos as datos
 from ._contexto import conversacion_de, obtener as contexto
@@ -93,6 +93,17 @@ def crear_pedido(items: list[dict], como_paga: str, config: RunnableConfig) -> s
             )
         except datos.PedidoInvalido as e:
             return str(e)
+
+        # El pedido recién creado no trae cliente_nombre/cliente_telefono
+        # como claves planas (sí un `cliente` anidado): se aplanan acá
+        # para que sheets._fila_de use la misma forma que el panel.
+        para_sheets = {
+            **pedido,
+            "cliente_nombre": pedido["cliente"]["nombre"],
+            "cliente_telefono": pedido["cliente"]["telefono"],
+        }
+        if sheets.sincronizar_pedido(ctx.sheets, para_sheets):
+            datos.marcar_sincronizado_con_sheets(conexion, pedido["id"])
 
     fecha_texto = horario.formatear_fecha(pedido["agenda"].fecha_promesa)
     return (

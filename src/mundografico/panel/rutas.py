@@ -21,11 +21,11 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import base_datos, horario
+from .. import base_datos, horario, sheets
 from .. import catalogo as motor
 from .. import pedidos as datos
 from ..chatwoot_api import ClienteChatwoot
-from ..config import Config as ConfigNegocio
+from ..config import Config
 from .auth import requerir_acceso
 
 registro = logging.getLogger("mundografico.panel")
@@ -40,7 +40,7 @@ DIAS_SEMANA = (
 )
 
 
-def crear_router(config: ConfigNegocio, chatwoot: ClienteChatwoot) -> APIRouter:
+def crear_router(config: Config, chatwoot: ClienteChatwoot) -> APIRouter:
     """Arma el router del panel, cerrado sobre `config` y `chatwoot`.
 
     Mismo patrón que `agente/web/webhook.py`: las dependencias se reciben
@@ -86,6 +86,7 @@ def crear_router(config: ConfigNegocio, chatwoot: ClienteChatwoot) -> APIRouter:
         with base_datos.obtener_pool().connection() as conexion:
             datos.marcar_listo(conexion, pedido_id)
             pedido = datos.pedido_con_cliente(conexion, pedido_id)
+            _sincronizar_sheets(config, conexion, pedido)
 
         _avisar_listo(chatwoot, config, pedido)
         return _fila(request, pedido)
@@ -95,6 +96,7 @@ def crear_router(config: ConfigNegocio, chatwoot: ClienteChatwoot) -> APIRouter:
         with base_datos.obtener_pool().connection() as conexion:
             datos.marcar_entregado(conexion, pedido_id, monto_cobrado)
             pedido = datos.pedido_con_cliente(conexion, pedido_id)
+            _sincronizar_sheets(config, conexion, pedido)
 
         return _fila(request, pedido)
 
@@ -103,6 +105,7 @@ def crear_router(config: ConfigNegocio, chatwoot: ClienteChatwoot) -> APIRouter:
         with base_datos.obtener_pool().connection() as conexion:
             datos.cancelar_pedido(conexion, pedido_id, motivo)
             pedido = datos.pedido_con_cliente(conexion, pedido_id)
+            _sincronizar_sheets(config, conexion, pedido)
 
         return _fila(request, pedido)
 
@@ -214,7 +217,16 @@ def crear_router(config: ConfigNegocio, chatwoot: ClienteChatwoot) -> APIRouter:
 # -- Ayudantes ----------------------------------------------------------------
 
 
-def _avisar_listo(chatwoot: ClienteChatwoot, config: ConfigNegocio, pedido: dict) -> None:
+def _sincronizar_sheets(config: Config, conexion, pedido: dict) -> None:
+    """Best-effort: si sale bien apaga `pendiente_sheets`, si no lo deja
+    prendido para que lo agarre el reintento periódico
+    (`servidor_mundografico.py`) o el próximo cambio de estado de este
+    mismo pedido."""
+    if sheets.sincronizar_pedido(config.sheets, pedido):
+        datos.marcar_sincronizado_con_sheets(conexion, pedido["id"])
+
+
+def _avisar_listo(chatwoot: ClienteChatwoot, config: Config, pedido: dict) -> None:
     """El mensaje automático al cliente. Que Chatwoot esté caído no puede
     tirar abajo la acción de marcar el pedido como listo: el trabajador ya
     hizo lo suyo, y el aviso se puede reintentar o mandar a mano."""
