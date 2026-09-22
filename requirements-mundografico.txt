@@ -1,0 +1,29 @@
+# Lo que hace falta además del AgentKit para correr Mundo Gráfico completo
+# (agente + panel + Postgres + Sheets):
+#
+#   pip install -r requirements-mundografico.txt
+#
+# Es lo que instala el Dockerfile. Incluye requirements-produccion.txt
+# (Postgres para la memoria de conversaciones) porque acá Postgres no es
+# opcional: además de la memoria del agente, ahí vive todo el catálogo,
+# los pedidos y la agenda del taller.
+-r requirements-produccion.txt
+
+# --- El panel interno -------------------------------------------------------
+jinja2>=3.1,<4
+python-multipart>=0.0.12,<1   # FastAPI necesita esto para leer los <form>
+
+# --- El pool de conexiones para el catálogo/pedidos --------------------------
+# langgraph-checkpoint-postgres (en requirements-produccion.txt) ya trae
+# psycopg[binary]; esto suma el pool, que ese paquete no incluye.
+psycopg-pool>=3.2,<4
+
+# --- La hora de Laferrere, no la del contenedor ------------------------------
+# La imagen python:slim no siempre trae la base de husos horarios del
+# sistema operativo, y sin ella ZoneInfo no encuentra
+# "America/Argentina/Buenos_Aires" (ver mundografico/horario.py).
+tzdata
+
+# --- Google Sheets -------------------------------------------------------------
+gspread>=6.1,<7
+google-auth>=2.32,<3

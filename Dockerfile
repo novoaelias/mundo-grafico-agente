@@ -1,12 +1,14 @@
-# El agente atendiendo WhatsApp, en un servidor.
+# Mundo Gráfico: el webhook de Chatwoot del AgentKit + el panel interno,
+# en un servidor.
 #
-# Corre `webhook_chatwoot.py`: un servidor que espera a que Chatwoot le pegue
-# cuando llega un mensaje. A diferencia del bot de Telegram (que sale a buscar
-# los mensajes y no abre ningún puerto), este SÍ escucha en un puerto y
-# necesita dominio con HTTPS, porque acá entra alguien de afuera.
+# Corre `servidor_mundografico.py`, no el `webhook_chatwoot.py` original del
+# kit: es el mismo servidor (mismo webhook, mismo /salud) con el panel de
+# pedidos/catálogo/taller sumado encima y las migraciones de Postgres
+# aplicándose solas al arrancar. Ver ese archivo para el detalle.
 #
-# El bot de Telegram también queda adentro de la imagen: si algún día querés
-# correr ese en vez de este, se cambia el CMD y nada más.
+# El bot de Telegram del kit también queda adentro de la imagen por las
+# dudas, aunque acá Telegram entra por Chatwoot (un inbox más), no por
+# `bot_telegram.py` directo.
 #
 # Toda la configuración entra por variables de entorno. El .env no se copia
 # acá adentro: en el servidor las variables las pone Coolify.
@@ -38,12 +40,12 @@ RUN apt-get update \
 # Las dependencias primero y el código después: así, mientras no toques los
 # requirements, Docker reusa la capa ya instalada y el deploy tarda segundos
 # en vez de minutos.
-COPY requirements.txt requirements-produccion.txt ./
-RUN pip install --no-cache-dir -r requirements-produccion.txt
+COPY requirements.txt requirements-produccion.txt requirements-mundografico.txt ./
+RUN pip install --no-cache-dir -r requirements-mundografico.txt
 
 COPY src/ ./src/
 COPY prompts/ ./prompts/
-COPY webhook_chatwoot.py bot_telegram.py ./
+COPY webhook_chatwoot.py bot_telegram.py servidor_mundografico.py ./
 
 # Sin esto corre como root sin necesidad: el servidor no escribe nada en
 # disco (la memoria va a Postgres).
@@ -55,4 +57,4 @@ USER agente
 ENV PUERTO=8000
 EXPOSE 8000
 
-CMD ["python", "webhook_chatwoot.py"]
+CMD ["python", "servidor_mundografico.py"]

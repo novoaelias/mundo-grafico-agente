@@ -46,8 +46,6 @@ class ConfigPanel:
 
     usuario: str = "mundografico"
     clave: str = ""
-    # Clave de sesión para firmar la cookie del panel (ver panel/auth.py).
-    clave_secreta: str = ""
 
 
 @dataclass
@@ -99,7 +97,6 @@ class Config:
             panel=ConfigPanel(
                 usuario=(os.getenv("PANEL_USUARIO") or "mundografico").strip(),
                 clave=(os.getenv("PANEL_CLAVE") or "").strip(),
-                clave_secreta=(os.getenv("PANEL_CLAVE_SECRETA") or "").strip(),
             ),
             sheets=ConfigSheets(
                 id_hoja=(os.getenv("GOOGLE_SHEETS_ID") or "").strip(),
