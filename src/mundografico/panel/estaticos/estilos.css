@@ -1,0 +1,292 @@
+/* Panel interno de Mundo Gráfico.
+   Plano a propósito: es una herramienta de trabajo para dos o tres
+   personas en un mostrador, no un producto para mostrar en una vidriera.
+   Sin framework de CSS: alcanza esto y no depende de que ningún CDN
+   externo esté arriba para que el panel funcione. */
+
+:root {
+  --tinta: #1c1917;
+  --tinta-suave: #57534e;
+  --borde: #e7e5e4;
+  --fondo: #fafaf9;
+  --superficie: #ffffff;
+  --acento: #b45309;       /* un ocre/naranja quemado, cosa de imprenta */
+  --acento-suave: #fef3c7;
+  --verde: #15803d;
+  --verde-suave: #dcfce7;
+  --rojo: #b91c1c;
+  --rojo-suave: #fee2e2;
+  --azul: #1d4ed8;
+  --azul-suave: #dbeafe;
+  --radio: 8px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: var(--tinta);
+  background: var(--fondo);
+  font-size: 15px;
+}
+
+main {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+
+h1 { font-size: 1.4rem; margin: 0 0 8px; }
+h2 { font-size: 1.1rem; margin: 32px 0 12px; }
+.ayuda { color: var(--tinta-suave); font-size: 0.9rem; margin: 0 0 20px; }
+code { background: var(--borde); padding: 1px 5px; border-radius: 4px; }
+
+/* -- Barra superior ------------------------------------------------------ */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.marca { font-weight: 700; font-size: 1.05rem; }
+
+.topbar nav { display: flex; gap: 4px; }
+
+.topbar nav a {
+  padding: 8px 14px;
+  border-radius: var(--radio);
+  color: var(--tinta-suave);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.topbar nav a:hover { background: var(--fondo); }
+.topbar nav a.activo { background: var(--acento-suave); color: var(--acento); }
+
+/* -- Carga del día --------------------------------------------------------- */
+
+.carga-hoy {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.carga-texto { margin-bottom: 8px; font-size: 0.95rem; }
+
+.etiqueta-lleno {
+  background: var(--rojo-suave);
+  color: var(--rojo);
+  font-weight: 700;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-left: 8px;
+}
+
+.carga-barra {
+  height: 10px;
+  background: var(--borde);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.carga-barra-relleno {
+  height: 100%;
+  background: var(--acento);
+  transition: width 0.3s ease;
+}
+
+/* -- Filtros --------------------------------------------------------------- */
+
+.filtros { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+
+.filtros a {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--borde);
+  color: var(--tinta-suave);
+  text-decoration: none;
+  font-size: 0.85rem;
+  background: var(--superficie);
+}
+
+.filtros a.activo { background: var(--tinta); color: var(--superficie); border-color: var(--tinta); }
+
+/* -- Tablas ------------------------------------------------------------------ */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  overflow: hidden;
+}
+
+thead { background: var(--fondo); }
+
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--borde);
+  font-size: 0.88rem;
+  vertical-align: top;
+}
+
+th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--tinta-suave); }
+
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: #fcfbfa; }
+
+.vacio { text-align: center; color: var(--tinta-suave); padding: 28px; }
+
+.tabla-pedidos { overflow-x: auto; display: block; }
+.tabla-pedidos thead, .tabla-pedidos tbody { display: table; width: 100%; table-layout: fixed; }
+
+.numero { font-weight: 700; white-space: nowrap; }
+.cliente-nombre { font-weight: 600; }
+.cliente-telefono { color: var(--tinta-suave); font-size: 0.8rem; }
+.detalle { font-size: 0.85rem; color: var(--tinta-suave); }
+.detalle .notas { margin-top: 4px; color: var(--acento); font-style: italic; }
+.total { font-weight: 700; white-space: nowrap; }
+.fecha { white-space: nowrap; }
+
+tr.vence-hoy { background: var(--acento-suave); }
+tr.estado-cancelado { opacity: 0.55; }
+
+/* -- Pastillas de estado --------------------------------------------------- */
+
+.pastilla {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+
+.pastilla.estado-pendiente { background: var(--azul-suave); color: var(--azul); }
+.pastilla.estado-en_proceso { background: var(--acento-suave); color: var(--acento); }
+.pastilla.estado-listo { background: var(--verde-suave); color: var(--verde); }
+.pastilla.estado-entregado { background: var(--borde); color: var(--tinta-suave); }
+.pastilla.estado-cancelado { background: var(--rojo-suave); color: var(--rojo); }
+
+.pastilla.pago-a_cobrar { background: var(--rojo-suave); color: var(--rojo); }
+.pastilla.pago-señado { background: var(--acento-suave); color: var(--acento); }
+.pastilla.pago-pagado { background: var(--verde-suave); color: var(--verde); }
+
+/* -- Botones ---------------------------------------------------------------- */
+
+.boton {
+  border: none;
+  border-radius: var(--radio);
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.boton-listo { background: var(--verde); color: white; }
+.boton-listo:hover { background: #12692f; }
+.boton-cancelar { background: transparent; color: var(--rojo); }
+.boton-cancelar:hover { background: var(--rojo-suave); }
+.boton-entregar { background: var(--tinta); color: white; }
+.boton-guardar { background: var(--acento); color: white; }
+.boton-guardar:hover { background: #92400a; }
+
+.acciones { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.sin-acciones { color: var(--borde); }
+
+.form-entregar { display: flex; gap: 6px; }
+.form-entregar input { width: 90px; }
+
+/* -- Inputs de catálogo ----------------------------------------------------- */
+
+.tabla-catalogo input, .tabla-catalogo select {
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.input-chico { width: 70px !important; }
+.input-nombre { min-width: 140px; }
+.escalas-solo-lectura { font-size: 0.78rem; color: var(--tinta-suave); }
+.marca-provisorio { color: var(--acento); font-size: 0.72rem; display: block; margin-top: 2px; }
+tr.inactivo { opacity: 0.5; }
+.centro { text-align: center; }
+
+.form-nuevo-producto {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 14px;
+}
+
+.form-nuevo-producto input, .form-nuevo-producto select {
+  padding: 7px 9px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+/* -- Formulario de taller ----------------------------------------------------- */
+
+.form-taller {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: 20px;
+  max-width: 460px;
+}
+
+.form-taller label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.form-taller input, .form-taller textarea {
+  font-weight: 400;
+  padding: 8px 10px;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.form-taller fieldset { border: 1px solid var(--borde); border-radius: 6px; padding: 10px 14px; }
+.form-taller legend { font-weight: 600; font-size: 0.85rem; padding: 0 6px; }
+.form-taller .dia { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; margin: 4px 0; }
+.form-taller .boton { align-self: flex-start; }
+
+.aviso-guardado { color: var(--verde); font-weight: 600; }
+
+/* -- Responsive ------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+  main { padding: 16px 16px 48px; }
+  .topbar { flex-direction: column; align-items: flex-start; }
+  th, td { font-size: 0.8rem; padding: 8px; }
+}

@@ -1,0 +1,33 @@
+<div id="panel-taller">
+  {% if guardado %}<p class="aviso-guardado">✓ Guardado.</p>{% endif %}
+
+  <form hx-post="/panel/taller" hx-target="#panel-taller" hx-swap="outerHTML" class="form-taller">
+    <label>
+      Minutos de trabajo por día
+      <input type="number" name="minutos_por_dia" value="{{ taller.minutos_por_dia }}" required min="1">
+    </label>
+
+    <label>
+      Horario límite para prometer entregas del mismo día
+      <input type="time" name="hora_corte_mismo_dia" value="{{ taller.hora_corte_mismo_dia.strftime('%H:%M') }}" required>
+    </label>
+
+    <fieldset>
+      <legend>Días de atención</legend>
+      {% for numero, nombre in dias_semana %}
+        <label class="dia">
+          <input type="checkbox" name="dias_habiles" value="{{ numero }}" {{ 'checked' if numero in taller.dias_habiles else '' }}>
+          {{ nombre }}
+        </label>
+      {% endfor %}
+    </fieldset>
+
+    <label>
+      Feriados (uno por línea, DD/MM/AAAA)
+      <textarea name="feriados" rows="4">{% for f in taller.feriados %}{{ f.strftime('%d/%m/%Y') }}
+{% endfor %}</textarea>
+    </label>
+
+    <button class="boton boton-guardar" type="submit">Guardar</button>
+  </form>
+</div>

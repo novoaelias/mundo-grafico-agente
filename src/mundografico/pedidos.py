@@ -309,6 +309,25 @@ def crear_pedido(
     }
 
 
+def pedido_con_cliente(conexion: Connection, pedido_id: int) -> dict | None:
+    """Un pedido con el nombre/teléfono del cliente ya resuelto.
+
+    Lo usa el panel para redibujar una sola fila después de una acción
+    (marcar listo, entregar): las funciones de cambio de estado devuelven
+    la fila de `pedidos` sola, sin el join, porque son las que también usa
+    el flujo de las herramientas, donde ese dato no hace falta.
+    """
+    return conexion.execute(
+        """
+        SELECT p.*, c.nombre AS cliente_nombre, c.telefono AS cliente_telefono
+        FROM mundografico.pedidos p
+        JOIN mundografico.clientes c ON c.id = p.cliente_id
+        WHERE p.id = %s
+        """,
+        (pedido_id,),
+    ).fetchone()
+
+
 def pedido_por_numero(conexion: Connection, numero: str) -> dict | None:
     return conexion.execute(
         "SELECT * FROM mundografico.pedidos WHERE numero = %s", (numero,)

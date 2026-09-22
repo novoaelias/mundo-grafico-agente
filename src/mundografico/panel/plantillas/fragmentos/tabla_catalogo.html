@@ -1,0 +1,17 @@
+<div id="tabla-catalogo">
+<table class="tabla-catalogo">
+  <thead>
+    <tr>
+      <th>Nombre</th><th>Categoría</th><th>Unidad</th><th>Precio</th><th>Mínimo</th>
+      <th>Escalas</th><th>Prep (min)</th><th>Min/unidad</th><th>Activo</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for producto in productos %}
+      {% include "fragmentos/fila_producto.html" %}
+    {% else %}
+      <tr><td colspan="10" class="vacio">Todavía no hay productos cargados.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block titulo %}Pedidos{% endblock %}
+{% block contenido %}
+
+<section class="carga-hoy">
+  <div class="carga-texto">
+    Hoy: <strong>{{ carga.usado }} de {{ carga.total }}</strong> minutos comprometidos
+    {% if carga.porcentaje >= 100 %}<span class="etiqueta-lleno">TALLER LLENO</span>{% endif %}
+  </div>
+  <div class="carga-barra">
+    <div class="carga-barra-relleno" style="width: {{ carga.porcentaje }}%"></div>
+  </div>
+</section>
+
+<div class="filtros">
+  <a href="/panel/pedidos" class="{{ 'activo' if not estado_filtro else '' }}">Todos</a>
+  {% for e in estados %}
+    <a href="/panel/pedidos?estado={{ e }}" class="{{ 'activo' if estado_filtro == e else '' }}">
+      {{ e.replace('_', ' ') }}
+    </a>
+  {% endfor %}
+</div>
+
+<table class="tabla-pedidos">
+  <thead>
+    <tr>
+      <th>N°</th><th>Cliente</th><th>Detalle</th><th>Total</th>
+      <th>Entrega</th><th>Estado</th><th>Pago</th><th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for pedido in pedidos %}
+      {% include "fragmentos/fila_pedido.html" %}
+    {% else %}
+      <tr><td colspan="8" class="vacio">No hay pedidos{{ ' con ese estado' if estado_filtro else '' }}.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endblock %}

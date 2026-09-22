@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block titulo %}Catálogo{% endblock %}
+{% block contenido %}
+
+<h1>Catálogo</h1>
+<p class="ayuda">
+  Los precios marcados con ⚠ son de ejemplo, puestos para la demo. Al guardar
+  cualquier cambio de precio de una fila, se confirma solo y deja de marcarse.
+</p>
+
+{% include "fragmentos/tabla_catalogo.html" %}
+
+<h2>Agregar producto</h2>
+<form class="form-nuevo-producto"
+      hx-post="/panel/catalogo/nuevo"
+      hx-target="#tabla-catalogo" hx-swap="outerHTML">
+  <input type="text" name="nombre" placeholder="Nombre" required>
+  <input type="text" name="categoria" placeholder="Categoría" value="general">
+  <select name="unidad">
+    <option value="unidad">unidad</option>
+    <option value="m2">m2</option>
+  </select>
+  <input type="number" step="0.01" name="precio_unitario" placeholder="Precio" required>
+  <input type="number" step="0.01" name="cantidad_minima" placeholder="Mínimo" value="1">
+  <input type="number" name="minutos_preparacion" placeholder="Prep (min)" value="0">
+  <input type="number" step="0.01" name="minutos_por_unidad" placeholder="Min/unidad" value="0">
+  <button class="boton boton-guardar" type="submit">Agregar</button>
+</form>
+
+{% endblock %}

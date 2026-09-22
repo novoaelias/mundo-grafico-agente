@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block titulo %}Taller{% endblock %}
+{% block contenido %}
+
+<h1>Configuración del taller</h1>
+<p class="ayuda">
+  Esto es lo que usa <code>calcular_entrega</code> para no prometer una fecha
+  que el taller no puede cumplir.
+</p>
+
+{% include "fragmentos/formulario_taller.html" %}
+
+{% endblock %}

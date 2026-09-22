@@ -1,0 +1,32 @@
+<tr id="producto-{{ producto.id }}" class="{{ 'provisorio' if producto.precio_provisorio else '' }} {{ 'inactivo' if not producto.activo else '' }}">
+  <td><input type="text" name="nombre" value="{{ producto.nombre }}" class="input-nombre"></td>
+  <td><input type="text" name="categoria" value="{{ producto.categoria }}" class="input-chico"></td>
+  <td>
+    <select name="unidad">
+      {% for u in ('unidad', 'm2') %}
+        <option value="{{ u }}" {{ 'selected' if producto.unidad == u else '' }}>{{ u }}</option>
+      {% endfor %}
+    </select>
+  </td>
+  <td>
+    <input type="number" step="0.01" name="precio_unitario" value="{{ producto.precio_unitario }}" class="input-chico">
+    {% if producto.precio_provisorio %}<span class="marca-provisorio" title="Precio de ejemplo: se confirma solo al guardar un cambio">⚠ ejemplo</span>{% endif %}
+  </td>
+  <td><input type="number" step="0.01" name="cantidad_minima" value="{{ producto.cantidad_minima }}" class="input-chico"></td>
+  <td class="escalas-solo-lectura">
+    {% if producto.escalas %}
+      {% for e in producto.escalas %}<div>desde {{ e.desde | round(0) | int }}: {{ e.precio_unitario | plata }}</div>{% endfor %}
+    {% else %}<span class="sin-acciones">—</span>{% endif %}
+  </td>
+  <td><input type="number" name="minutos_preparacion" value="{{ producto.minutos_preparacion }}" class="input-chico"></td>
+  <td><input type="number" step="0.01" name="minutos_por_unidad" value="{{ producto.minutos_por_unidad }}" class="input-chico"></td>
+  <td class="centro"><input type="checkbox" name="activo" value="true" {{ 'checked' if producto.activo else '' }}></td>
+  <td>
+    <button class="boton boton-guardar" type="button"
+            hx-post="/panel/catalogo/{{ producto.id }}"
+            hx-include="closest tr"
+            hx-target="#producto-{{ producto.id }}" hx-swap="outerHTML">
+      Guardar
+    </button>
+  </td>
+</tr>

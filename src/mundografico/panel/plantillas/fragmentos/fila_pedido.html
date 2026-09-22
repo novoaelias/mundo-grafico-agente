@@ -1,0 +1,42 @@
+<tr id="pedido-{{ pedido.id }}" class="fila-pedido estado-{{ pedido.estado }} {{ 'vence-hoy' if pedido.fecha_promesa == hoy and pedido.estado in ('pendiente', 'en_proceso') else '' }}">
+  <td class="numero">{{ pedido.numero }}</td>
+  <td>
+    <div class="cliente-nombre">{{ pedido.cliente_nombre or '(sin nombre)' }}</div>
+    {% if pedido.cliente_telefono %}<div class="cliente-telefono">{{ pedido.cliente_telefono }}</div>{% endif %}
+  </td>
+  <td class="detalle">
+    {% for item in pedido.detalle %}
+      <div>{{ item.cantidad | round(2) }} {{ item.unidad }} · {{ item.nombre }}</div>
+    {% endfor %}
+    {% if pedido.notas %}<div class="notas">💬 {{ pedido.notas }}</div>{% endif %}
+  </td>
+  <td class="total">{{ pedido.total | plata }}</td>
+  <td class="fecha">{{ pedido.fecha_promesa | fecha }}</td>
+  <td><span class="pastilla estado-{{ pedido.estado }}">{{ pedido.estado.replace('_', ' ') }}</span></td>
+  <td><span class="pastilla pago-{{ pedido.estado_pago }}">{{ pedido.estado_pago.replace('_', ' ') }}</span></td>
+  <td class="acciones">
+    {% if pedido.estado in ('pendiente', 'en_proceso') %}
+      <button class="boton boton-listo"
+              hx-post="/panel/pedidos/{{ pedido.id }}/listo"
+              hx-target="#pedido-{{ pedido.id }}" hx-swap="outerHTML"
+              hx-confirm="¿Marcar {{ pedido.numero }} como listo? Se le avisa al cliente por WhatsApp.">
+        ✓ Listo
+      </button>
+      <button class="boton boton-cancelar"
+              hx-post="/panel/pedidos/{{ pedido.id }}/cancelar"
+              hx-target="#pedido-{{ pedido.id }}" hx-swap="outerHTML"
+              hx-confirm="¿Cancelar el pedido {{ pedido.numero }}?">
+        Cancelar
+      </button>
+    {% elif pedido.estado == 'listo' %}
+      <form class="form-entregar"
+            hx-post="/panel/pedidos/{{ pedido.id }}/entregado"
+            hx-target="#pedido-{{ pedido.id }}" hx-swap="outerHTML">
+        <input type="number" name="monto_cobrado" step="0.01" placeholder="$ cobrado" required value="{{ pedido.total }}">
+        <button class="boton boton-entregar" type="submit">Entregar</button>
+      </form>
+    {% else %}
+      <span class="sin-acciones">—</span>
+    {% endif %}
+  </td>
+</tr>
