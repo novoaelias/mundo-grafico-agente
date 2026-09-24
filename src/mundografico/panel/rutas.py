@@ -15,9 +15,10 @@ mano en la base mientras tanto.
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -40,7 +41,9 @@ DIAS_SEMANA = (
 )
 
 
-def crear_router(config: Config, chatwoot: ClienteChatwoot) -> APIRouter:
+def crear_router(
+    config: Config, chatwoot: ClienteChatwoot, etiqueta_humano: str = "humano",
+) -> APIRouter:
     """Arma el router del panel, cerrado sobre `config` y `chatwoot`.
 
     Mismo patrón que `agente/web/webhook.py`: las dependencias se reciben
@@ -81,31 +84,86 @@ def crear_router(config: Config, chatwoot: ClienteChatwoot) -> APIRouter:
             request, "fragmentos/fila_pedido.html", {"pedido": pedido, "hoy": horario.hoy()}
         )
 
+    def _estado_bot(request: Request, pedido_id: int, en_pausa: bool | None):
+        return plantillas.TemplateResponse(
+            request, "fragmentos/estado_bot.html",
+            {"pedido_id": pedido_id, "en_pausa": en_pausa},
+        )
+
+    def _conversacion_del_pedido(pedido_id: int) -> str:
+        with base_datos.obtener_pool().connection() as conexion:
+            pedido = datos.pedido_con_cliente(conexion, pedido_id)
+        if pedido is None:
+            raise HTTPException(status_code=404, detail="No existe el pedido.")
+        return pedido["conversacion_id"]
+
+    @router.get("/pedidos/{pedido_id}/bot")
+    def ver_estado_bot(pedido_id: int, request: Request):
+        conversacion_id = _conversacion_del_pedido(pedido_id)
+        try:
+            en_pausa = etiqueta_humano in chatwoot.etiquetas(conversacion_id)
+        except Exception:
+            registro.exception("No se pudo consultar el bot del pedido %s", pedido_id)
+            en_pausa = None
+        return _estado_bot(request, pedido_id, en_pausa)
+
+    @router.post("/pedidos/{pedido_id}/reanudar-bot")
+    def reanudar_bot(pedido_id: int, request: Request):
+        conversacion_id = _conversacion_del_pedido(pedido_id)
+        try:
+            chatwoot.quitar_etiqueta(conversacion_id, etiqueta_humano)
+        except Exception:
+            registro.exception("No se pudo reanudar el bot del pedido %s", pedido_id)
+            return _estado_bot(request, pedido_id, None)
+        return _estado_bot(request, pedido_id, False)
+
     @router.post("/pedidos/{pedido_id}/listo")
     def marcar_listo(pedido_id: int, request: Request):
-        with base_datos.obtener_pool().connection() as conexion:
-            datos.marcar_listo(conexion, pedido_id)
-            pedido = datos.pedido_con_cliente(conexion, pedido_id)
-            _sincronizar_sheets(config, conexion, pedido)
+        try:
+            with base_datos.obtener_pool().connection() as conexion:
+                datos.marcar_listo(conexion, pedido_id)
+                pedido = datos.pedido_con_cliente(conexion, pedido_id)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
 
-        _avisar_listo(chatwoot, config, pedido)
+        # La transición ya quedó confirmada. Un error de red no puede
+        # revertir el trabajo del taller ni fingir que el aviso salió.
+        if _avisar_listo(chatwoot, config, pedido):
+            pedido = _registrar_aviso(pedido_id, pedido)
+        _sincronizar_sheets(config, pedido)
+        return _fila(request, pedido)
+
+    @router.post("/pedidos/{pedido_id}/aviso")
+    def reintentar_aviso(pedido_id: int, request: Request):
+        with base_datos.obtener_pool().connection() as conexion:
+            pedido = datos.pedido_con_cliente(conexion, pedido_id)
+        if not pedido or pedido["estado"] != "listo" or pedido.get("avisado_listo_en"):
+            raise HTTPException(status_code=409, detail="Este pedido no tiene un aviso pendiente.")
+        if _avisar_listo(chatwoot, config, pedido):
+            pedido = _registrar_aviso(pedido_id, pedido)
         return _fila(request, pedido)
 
     @router.post("/pedidos/{pedido_id}/entregado")
-    def marcar_entregado(pedido_id: int, request: Request, monto_cobrado: float = Form(...)):
-        with base_datos.obtener_pool().connection() as conexion:
-            datos.marcar_entregado(conexion, pedido_id, monto_cobrado)
-            pedido = datos.pedido_con_cliente(conexion, pedido_id)
-            _sincronizar_sheets(config, conexion, pedido)
+    def marcar_entregado(pedido_id: int, request: Request, monto_cobrado: Decimal = Form(...)):
+        try:
+            with base_datos.obtener_pool().connection() as conexion:
+                datos.marcar_entregado(conexion, pedido_id, monto_cobrado)
+                pedido = datos.pedido_con_cliente(conexion, pedido_id)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        _sincronizar_sheets(config, pedido)
 
         return _fila(request, pedido)
 
     @router.post("/pedidos/{pedido_id}/cancelar")
     def cancelar(pedido_id: int, request: Request, motivo: str = Form("")):
-        with base_datos.obtener_pool().connection() as conexion:
-            datos.cancelar_pedido(conexion, pedido_id, motivo)
-            pedido = datos.pedido_con_cliente(conexion, pedido_id)
-            _sincronizar_sheets(config, conexion, pedido)
+        try:
+            with base_datos.obtener_pool().connection() as conexion:
+                datos.cancelar_pedido(conexion, pedido_id, motivo)
+                pedido = datos.pedido_con_cliente(conexion, pedido_id)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        _sincronizar_sheets(config, pedido)
 
         return _fila(request, pedido)
 
@@ -159,6 +217,7 @@ def crear_router(config: Config, chatwoot: ClienteChatwoot) -> APIRouter:
         minutos_preparacion: int = Form(0),
         minutos_por_unidad: float = Form(0),
         activo: str = Form(""),
+        confirmar_precio: str = Form(""),
     ):
         with base_datos.obtener_pool().connection() as conexion:
             producto = datos.actualizar_producto(conexion, producto_id, {
@@ -167,6 +226,7 @@ def crear_router(config: Config, chatwoot: ClienteChatwoot) -> APIRouter:
                 "minutos_preparacion": minutos_preparacion,
                 "minutos_por_unidad": minutos_por_unidad,
                 "activo": _es_verdadero(activo),
+                **({"precio_provisorio": False} if _es_verdadero(confirmar_precio) else {}),
             })
 
         return plantillas.TemplateResponse(
@@ -195,15 +255,19 @@ def crear_router(config: Config, chatwoot: ClienteChatwoot) -> APIRouter:
     ):
         from datetime import time as _time
 
+        if minutos_por_dia <= 0 or not dias_habiles:
+            raise HTTPException(status_code=422, detail="Indicá capacidad positiva y al menos un día hábil.")
+        try:
+            fechas = _parsear_fechas(feriados)
+            corte = _time.fromisoformat(hora_corte_mismo_dia)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
         with base_datos.obtener_pool().connection() as conexion:
             taller = datos.actualizar_taller(conexion, {
                 "minutos_por_dia": minutos_por_dia,
-                # Se convierte a `time` en vez de mandar el string tal cual:
-                # así no depende de que Postgres le adivine el tipo a un
-                # parámetro de texto contra una columna TIME.
-                "hora_corte_mismo_dia": _time.fromisoformat(hora_corte_mismo_dia),
+                "hora_corte_mismo_dia": corte,
                 "dias_habiles": dias_habiles,
-                "feriados": _parsear_fechas(feriados),
+                "feriados": fechas,
             })
 
         return plantillas.TemplateResponse(
@@ -217,28 +281,50 @@ def crear_router(config: Config, chatwoot: ClienteChatwoot) -> APIRouter:
 # -- Ayudantes ----------------------------------------------------------------
 
 
-def _sincronizar_sheets(config: Config, conexion, pedido: dict) -> None:
+def _sincronizar_sheets(config: Config, pedido: dict) -> None:
     """Best-effort: si sale bien apaga `pendiente_sheets`, si no lo deja
     prendido para que lo agarre el reintento periódico
     (`servidor_mundografico.py`) o el próximo cambio de estado de este
     mismo pedido."""
     if sheets.sincronizar_pedido(config.sheets, pedido):
-        datos.marcar_sincronizado_con_sheets(conexion, pedido["id"])
+        try:
+            with base_datos.obtener_pool().connection() as conexion:
+                datos.marcar_sincronizado_con_sheets(
+                    conexion, pedido["id"], pedido.get("actualizado_en"),
+                )
+        except Exception:
+            registro.exception("Pedido %s actualizado; falló marcar Sheets sincronizado", pedido["numero"])
 
 
-def _avisar_listo(chatwoot: ClienteChatwoot, config: Config, pedido: dict) -> None:
+def _registrar_aviso(pedido_id: int, pedido: dict) -> dict:
+    try:
+        with base_datos.obtener_pool().connection() as conexion:
+            datos.registrar_aviso_enviado(conexion, pedido_id)
+            return datos.pedido_con_cliente(conexion, pedido_id)
+    except Exception:
+        # Chatwoot pudo haber aceptado el mensaje. No repetimos el envío
+        # automáticamente ante una respuesta incierta; el panel lo muestra
+        # pendiente para que el equipo revise la conversación.
+        registro.exception("Chatwoot aceptó el aviso de %s, pero no se pudo registrar", pedido["numero"])
+        return pedido
+
+
+def _avisar_listo(chatwoot: ClienteChatwoot, config: Config, pedido: dict) -> bool:
     """El mensaje automático al cliente. Que Chatwoot esté caído no puede
     tirar abajo la acción de marcar el pedido como listo: el trabajador ya
     hizo lo suyo, y el aviso se puede reintentar o mandar a mano."""
     texto = (
         f"¡Hola! Tu pedido {pedido['numero']} de {config.negocio.nombre} ya está "
-        f"listo. Podés pasar a retirarlo cuando quieras "
-        f"({config.negocio.direccion})."
+        f"listo. Podés pasar a retirarlo por nuestro local en "
+        f"{config.negocio.direccion}. Si necesitás la dirección exacta "
+        f"o el horario, te lo confirmamos por acá."
     )
     try:
         chatwoot.enviar_mensaje(pedido["conversacion_id"], texto)
     except Exception as e:
         registro.error("No se pudo avisar el pedido %s: %s", pedido["numero"], e)
+        return False
+    return True
 
 
 def _es_verdadero(valor: str) -> bool:
@@ -248,10 +334,8 @@ def _es_verdadero(valor: str) -> bool:
 def _parsear_fechas(texto: str) -> list:
     """"24/12/2026, 01/01/2027" → [date(2026,12,24), date(2027,1,1)].
 
-    Acepta además fechas ISO (2026-12-24) por si alguien pega la lista
-    desde otro lado. Una fecha que no se puede leer se ignora en vez de
-    romper el guardado entero: peor es perder toda la configuración del
-    taller por una coma de más.
+    Acepta además fechas ISO (2026-12-24). Una fecha inválida se rechaza
+    para que el panel no pierda silenciosamente un feriado del taller.
     """
     from datetime import datetime
 
@@ -266,4 +350,6 @@ def _parsear_fechas(texto: str) -> list:
                 break
             except ValueError:
                 continue
+        else:
+            raise ValueError(f"No pude leer la fecha '{parte}'. Usá DD/MM/AAAA.")
     return fechas

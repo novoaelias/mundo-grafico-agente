@@ -20,18 +20,6 @@ load_dotenv(RAIZ / ".env")
 
 POLITICAS_DE_PAGO_VALIDAS = ("retiro", "sena_50", "adelantado_100")
 
-# Con qué estado de pago nace un pedido nuevo, según la política vigente.
-# Sin una pasarela de pago integrada todavía, esto no VERIFICA que el
-# cobro entró de verdad — es una foto de lo que se acordó en la charla,
-# y asume que el bot (guiado por prompts/sistema.md) no cierra el pedido
-# hasta confirmar lo que corresponda. Lo usa herramientas/pedidos.py.
-ESTADO_PAGO_INICIAL = {
-    "retiro": "a_cobrar",
-    "sena_50": "señado",
-    "adelantado_100": "pagado",
-}
-
-
 class ErrorDeConfiguracion(Exception):
     """Falta algo en el .env o está mal puesto."""
 
@@ -42,11 +30,11 @@ class ConfigNegocio:
 
     nombre: str = "Mundo Gráfico"
     direccion: str = "Laferrere"
-    # Determina con qué estado_pago nace un pedido (ver ESTADO_PAGO_INICIAL
-    # más abajo). OJO: prompts/sistema.md no lee esta variable — es texto
-    # plano — así que cambiarla acá y no actualizar la sección 4 de ese
-    # archivo deja al bot hablando de una política que ya no rige.
+    # Solo "retiro" puede automatizarse sin un verificador de pagos. Si se
+    # elige una política con seña, la herramienta deriva el cierre al equipo.
+    # OJO: prompts/sistema.md es texto plano y debe actualizarse también.
     politica_pago: str = "retiro"
+    modo_demo: bool = False
 
 
 @dataclass
@@ -100,6 +88,7 @@ class Config:
                 nombre=(os.getenv("MG_NOMBRE") or "Mundo Gráfico").strip(),
                 direccion=(os.getenv("MG_DIRECCION") or "Laferrere").strip(),
                 politica_pago=politica,
+                modo_demo=(os.getenv("MG_MODO_DEMO") or "false").strip().lower() in ("1", "true", "si", "sí"),
             ),
             panel=ConfigPanel(
                 usuario=(os.getenv("PANEL_USUARIO") or "mundografico").strip(),

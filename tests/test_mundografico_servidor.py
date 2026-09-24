@@ -30,7 +30,7 @@ from mundografico.config import ConfigPanel  # noqa: E402
 def app(monkeypatch, tmp_path):
     # Nada de red: ni a Postgres (aplicar_migraciones), ni a Anthropic
     # (listar_modelos, que crear_modelo llama para saber el tope de tokens).
-    monkeypatch.setattr(base_datos, "aplicar_migraciones", lambda dsn: ["001_esquema.sql"])
+    monkeypatch.setattr(base_datos, "aplicar_migraciones", lambda dsn, incluir_demo=False: ["001_esquema.sql"])
     import agente.modelos as modelos_del_kit
     monkeypatch.setattr(modelos_del_kit, "listar_modelos", lambda proveedor, api_key: [])
 

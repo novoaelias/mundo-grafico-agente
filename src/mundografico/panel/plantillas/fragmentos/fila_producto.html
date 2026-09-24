@@ -10,7 +10,10 @@
   </td>
   <td>
     <input type="number" step="0.01" name="precio_unitario" value="{{ producto.precio_unitario }}" class="input-chico">
-    {% if producto.precio_provisorio %}<span class="marca-provisorio" title="Precio de ejemplo: se confirma solo al guardar un cambio">⚠ ejemplo</span>{% endif %}
+    {% if producto.precio_provisorio %}
+      <span class="marca-provisorio" title="Precio de ejemplo: no usar con clientes reales">⚠ ejemplo</span>
+      <label class="confirmar-precio"><input type="checkbox" name="confirmar_precio" value="true"> Confirmé este precio</label>
+    {% endif %}
   </td>
   <td><input type="number" step="0.01" name="cantidad_minima" value="{{ producto.cantidad_minima }}" class="input-chico"></td>
   <td class="escalas-solo-lectura">

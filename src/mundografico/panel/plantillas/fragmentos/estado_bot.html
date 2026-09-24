@@ -1,0 +1,14 @@
+<div id="bot-{{ pedido_id }}" class="estado-bot">
+  {% if en_pausa is sameas true %}
+    <span class="pastilla bot-pausado">Bot en pausa</span>
+    <button class="boton boton-reanudar" hx-post="/panel/pedidos/{{ pedido_id }}/reanudar-bot"
+            hx-target="#bot-{{ pedido_id }}" hx-swap="outerHTML"
+            hx-confirm="¿Devolverle al bot el control de esta conversación?">Reanudar</button>
+  {% elif en_pausa is sameas false %}
+    <span class="bot-activo">Bot activo</span>
+  {% else %}
+    <span class="bot-desconocido">Estado no disponible</span>
+    <button class="boton boton-reanudar" hx-get="/panel/pedidos/{{ pedido_id }}/bot"
+            hx-target="#bot-{{ pedido_id }}" hx-swap="outerHTML">Reintentar</button>
+  {% endif %}
+</div>

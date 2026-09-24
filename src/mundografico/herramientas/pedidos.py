@@ -3,14 +3,17 @@ alta de verdad, y consultarlo después."""
 
 from __future__ import annotations
 
+import logging
+
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from .. import agenda, base_datos, horario, sheets
 from .. import catalogo as motor
 from .. import pedidos as datos
-from ..config import ESTADO_PAGO_INICIAL
 from ._contexto import conversacion_de, obtener as contexto
+
+registro = logging.getLogger("mundografico.herramientas.pedidos")
 
 
 @tool
@@ -25,21 +28,25 @@ def calcular_entrega(items: list[dict]) -> str:
     Args:
         items: lo mismo que en `cotizar`: [{"producto": ..., "cantidad": ...}]
     """
-    with base_datos.obtener_pool().connection() as conexion:
-        productos = datos.productos_activos(conexion)
-        cotizacion = motor.cotizar(productos, items)
+    try:
+        with base_datos.obtener_pool().connection() as conexion:
+            productos = datos.productos_activos(conexion)
+            cotizacion = motor.cotizar(productos, items)
 
-        if not cotizacion.items:
-            return "No pude calcular una fecha: ninguno de esos productos está en el catálogo."
+            if not cotizacion.completa:
+                return "No pude calcular una fecha para todo el trabajo. " + cotizacion.texto()
 
-        taller = datos.obtener_taller(conexion)
-        hoy = horario.hoy()
-        comprometido = datos.comprometido_por_dia(conexion, hoy)
+            taller = datos.obtener_taller(conexion)
+            hoy = horario.hoy()
+            comprometido = datos.comprometido_por_dia(conexion, hoy)
 
-    ahora = horario.hora_actual()
-    resultado = agenda.proxima_fecha(
-        taller, comprometido, cotizacion.minutos_totales, desde=hoy, ahora=ahora,
-    )
+        ahora = horario.hora_actual()
+        resultado = agenda.proxima_fecha(
+            taller, comprometido, cotizacion.minutos_totales, desde=hoy, ahora=ahora,
+        )
+    except Exception:
+        registro.exception("Falló calcular_entrega")
+        return "No pude confirmar una fecha de entrega. Derivá la consulta al equipo."
     fecha_texto = horario.formatear_fecha(resultado.fecha_promesa)
 
     if resultado.entra_hoy and not resultado.se_reparte_en_varios_dias:
@@ -77,10 +84,16 @@ def crear_pedido(items: list[dict], como_paga: str, config: RunnableConfig) -> s
     """
     conversacion = conversacion_de(config)
     ctx = contexto()
+    if ctx.negocio.politica_pago != "retiro":
+        return (
+            "Esta política requiere verificar el pago antes de confirmar. "
+            "No puedo comprobar una seña o adelanto automáticamente; "
+            "derivá la conversación a una persona del equipo."
+        )
     contacto = ctx.chatwoot.datos_contacto(conversacion)
 
-    with base_datos.obtener_pool().connection() as conexion:
-        try:
+    try:
+        with base_datos.obtener_pool().connection() as conexion:
             pedido = datos.crear_pedido(
                 conexion,
                 conversacion_id=conversacion,
@@ -91,25 +104,37 @@ def crear_pedido(items: list[dict], como_paga: str, config: RunnableConfig) -> s
                 telefono_cliente=contacto["telefono"],
                 contacto_id=contacto["contacto_id"],
                 notas=como_paga,
-                estado_pago=ESTADO_PAGO_INICIAL.get(ctx.negocio.politica_pago, "a_cobrar"),
+                estado_pago="a_cobrar",
+                permitir_precios_provisorios=ctx.negocio.modo_demo,
             )
-        except datos.PedidoInvalido as e:
-            return str(e)
+    except datos.PedidoInvalido as e:
+        return str(e)
+    except Exception:
+        registro.exception("Falló crear_pedido antes de confirmar la transacción")
+        return "No pude confirmar el pedido. Derivá la consulta al equipo antes de volver a intentarlo."
 
-        # El pedido recién creado no trae cliente_nombre/cliente_telefono
-        # como claves planas (sí un `cliente` anidado): se aplanan acá
-        # para que sheets._fila_de use la misma forma que el panel.
-        para_sheets = {
-            **pedido,
-            "cliente_nombre": pedido["cliente"]["nombre"],
-            "cliente_telefono": pedido["cliente"]["telefono"],
-        }
-        if sheets.sincronizar_pedido(ctx.sheets, para_sheets):
-            datos.marcar_sincronizado_con_sheets(conexion, pedido["id"])
+    # Google puede tardar o fallar. El pedido y su reserva de capacidad ya
+    # quedaron confirmados antes de hacer cualquier pedido de red a Sheets.
+    para_sheets = {
+        **pedido,
+        "cliente_nombre": pedido["cliente"]["nombre"],
+        "cliente_telefono": pedido["cliente"]["telefono"],
+    }
+    if sheets.sincronizar_pedido(ctx.sheets, para_sheets):
+        try:
+            with base_datos.obtener_pool().connection() as conexion:
+                datos.marcar_sincronizado_con_sheets(
+                    conexion, pedido["id"], pedido.get("actualizado_en"),
+                )
+        except Exception:
+            # La venta ya existe: no devolver un error que invite al modelo
+            # a crearla otra vez. El reintento periódico resolverá la marca.
+            registro.exception("Pedido %s creado; falló marcar Sheets sincronizado", pedido["numero"])
 
     fecha_texto = horario.formatear_fecha(pedido["agenda"].fecha_promesa)
+    prefijo = "Pedido de demostración" if ctx.negocio.modo_demo else "Pedido"
     return (
-        f"Pedido {pedido['numero']} anotado. "
+        f"{prefijo} {pedido['numero']} anotado. "
         f"Total {motor.formato_dinero(float(pedido['total']))}. "
         f"Listo el {fecha_texto}."
     )
@@ -122,7 +147,8 @@ def estado_pedido(numero: str, config: RunnableConfig) -> str:
     Si la persona te dio un número de pedido (por ejemplo "MG-0007"),
     pasalo en `numero`. Si no lo tiene o no te acordás de habérselo dado en
     esta charla, dejá `numero` vacío: se buscan los pedidos de esta misma
-    conversación.
+    conversación. Por privacidad, un número de otra conversación no alcanza
+    para consultar el pedido: derivá al equipo para verificar identidad.
 
     Args:
         numero: el número de pedido, o "" si no se sabe.
@@ -130,12 +156,16 @@ def estado_pedido(numero: str, config: RunnableConfig) -> str:
     conversacion = conversacion_de(config)
     numero = (numero or "").strip().upper()
 
-    with base_datos.obtener_pool().connection() as conexion:
-        if numero:
-            pedido = datos.pedido_por_numero(conexion, numero)
-            encontrados = [pedido] if pedido else []
-        else:
-            encontrados = datos.pedidos_de_conversacion(conexion, conversacion)
+    try:
+        with base_datos.obtener_pool().connection() as conexion:
+            if numero:
+                pedido = datos.pedido_por_numero(conexion, numero, conversacion)
+                encontrados = [pedido] if pedido else []
+            else:
+                encontrados = datos.pedidos_de_conversacion(conexion, conversacion)
+    except Exception:
+        registro.exception("Falló estado_pedido")
+        return "No pude consultar el estado ahora. Derivá la consulta al equipo."
 
     if not encontrados:
         return (

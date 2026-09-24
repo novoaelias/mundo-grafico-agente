@@ -15,13 +15,19 @@ PROMPT_DE_EMERGENCIA = (
 
 
 def leer_prompt(ruta: Path) -> str:
-    """Lee el prompt del sistema. Si el archivo no está, usa uno mínimo."""
+    """Lee el sistema y, si existe, suma ejemplos de diálogo editables."""
     try:
         texto = ruta.read_text(encoding="utf-8").strip()
     except FileNotFoundError:
         return PROMPT_DE_EMERGENCIA
 
-    return texto or PROMPT_DE_EMERGENCIA
+    texto = texto or PROMPT_DE_EMERGENCIA
+    ejemplos = ruta.with_name("ejemplos.md")
+    if ejemplos.is_file():
+        contenido = ejemplos.read_text(encoding="utf-8").strip()
+        if contenido:
+            texto += "\n\n" + contenido
+    return texto
 
 
 def guardar_prompt(ruta: Path, texto: str) -> None:

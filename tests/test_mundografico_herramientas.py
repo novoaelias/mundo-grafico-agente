@@ -22,7 +22,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from mundografico import base_datos  # noqa: E402
+from mundografico import base_datos, horario  # noqa: E402
 from mundografico import pedidos as datos  # noqa: E402
 from mundografico.config import ConfigNegocio, ConfigSheets  # noqa: E402
 from mundografico.herramientas import _contexto  # noqa: E402
@@ -129,6 +129,9 @@ def test_cotizar_devuelve_el_texto_de_la_cotizacion(monkeypatch):
 
 
 def preparar_agenda(monkeypatch, comprometido=None):
+    # La respuesta no puede depender de la hora ni del día en que corre pytest.
+    monkeypatch.setattr(horario, "hoy", lambda: date(2026, 9, 21))
+    monkeypatch.setattr(horario, "hora_actual", lambda: time(10, 0))
     monkeypatch.setattr(datos, "productos_activos", lambda conexion: PRODUCTOS)
     monkeypatch.setattr(datos, "obtener_taller", lambda conexion: TALLER)
     monkeypatch.setattr(
@@ -145,7 +148,7 @@ def test_calcular_entrega_hoy_mismo(monkeypatch):
 
 
 def test_calcular_entrega_da_el_motivo_cuando_no_llega_hoy(monkeypatch):
-    hoy_ocupado = {date.today(): 300}
+    hoy_ocupado = {date(2026, 9, 21): 300}
     preparar_agenda(monkeypatch, comprometido=hoy_ocupado)
 
     texto = calcular_entrega.invoke({"items": [{"producto": "sello", "cantidad": 1}]})
@@ -160,6 +163,15 @@ def test_calcular_entrega_producto_no_encontrado(monkeypatch):
     texto = calcular_entrega.invoke({"items": [{"producto": "algo raro", "cantidad": 1}]})
 
     assert "No pude calcular" in texto
+
+
+def test_calcular_entrega_no_promete_fecha_para_cotizacion_parcial(monkeypatch):
+    preparar_agenda(monkeypatch)
+    texto = calcular_entrega.invoke({"items": [
+        {"producto": "lona", "cantidad": 2},
+        {"producto": "un dron", "cantidad": 1},
+    ]})
+    assert "No pude calcular una fecha para todo" in texto
 
 
 # -- crear_pedido -----------------------------------------------------------------
@@ -194,7 +206,7 @@ def test_crear_pedido_usa_el_contacto_de_chatwoot_y_arma_el_texto(monkeypatch, c
     assert "$9.000" in texto
 
 
-def test_crear_pedido_aplica_el_estado_de_pago_segun_la_politica_vigente(monkeypatch):
+def test_crear_pedido_con_sena_no_marca_pago_sin_verificar(monkeypatch):
     capturado = {}
 
     def crear_falso(conexion, **kwargs):
@@ -214,12 +226,13 @@ def test_crear_pedido_aplica_el_estado_de_pago_segun_la_politica_vigente(monkeyp
         )
     )
 
-    crear_pedido.invoke(
+    respuesta = crear_pedido.invoke(
         {"items": [{"producto": "lona", "cantidad": 1}], "como_paga": "señó el 50%"},
         config=CONFIG,
     )
 
-    assert capturado["estado_pago"] == "señado"
+    assert "verificar el pago" in respuesta
+    assert capturado == {}
 
 
 def test_crear_pedido_invalido_devuelve_el_motivo_sin_reventar(monkeypatch):
@@ -242,7 +255,7 @@ def test_crear_pedido_invalido_devuelve_el_motivo_sin_reventar(monkeypatch):
 def test_estado_pedido_por_numero(monkeypatch):
     monkeypatch.setattr(
         datos, "pedido_por_numero",
-        lambda conexion, numero: {
+        lambda conexion, numero, conversacion: {
             "numero": "MG-0002", "estado": "listo", "total": 6500,
             "fecha_promesa": date(2026, 9, 22),
         },
@@ -269,7 +282,7 @@ def test_estado_pedido_sin_numero_busca_por_conversacion(monkeypatch):
 
 
 def test_estado_pedido_no_encontrado(monkeypatch):
-    monkeypatch.setattr(datos, "pedido_por_numero", lambda conexion, numero: None)
+    monkeypatch.setattr(datos, "pedido_por_numero", lambda conexion, numero, conversacion: None)
 
     texto = estado_pedido.invoke({"numero": "MG-9999"}, config=CONFIG)
 

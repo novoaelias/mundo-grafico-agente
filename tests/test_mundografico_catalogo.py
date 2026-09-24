@@ -203,6 +203,39 @@ def test_item_sin_cantidad_o_sin_nombre_se_ignora():
 
     assert resultado.items == []
     assert resultado.no_encontrados == []
+    assert len(resultado.invalidos) == 3
+    assert resultado.completa is False
+
+
+def test_un_alias_exacto_gana_a_una_coincidencia_parcial():
+    con_ojales = dict(LONA, id=9, nombre="Lona con ojales", alias=["banner con ojales"])
+    resultado = cotizar([con_ojales, LONA], [{"producto": "lona", "cantidad": 2}])
+    assert resultado.items[0].producto_id == LONA["id"]
+
+
+def test_dos_alias_iguales_exigen_aclaracion():
+    con_ojales = dict(LONA, id=9, nombre="Lona con ojales", alias=["lona"])
+    resultado = cotizar([LONA, con_ojales], [{"producto": "lona", "cantidad": 2}])
+    assert resultado.items == []
+    assert resultado.ambiguos == ["lona"]
+    assert resultado.completa is False
+
+
+def test_precio_provisorio_se_advierte_en_la_cotizacion():
+    resultado = cotizar([dict(LONA, precio_provisorio=True)], [{"producto": "lona", "cantidad": 2}])
+    assert "demostración" in resultado.texto()
+
+
+def test_cantidad_no_finita_no_se_cotiza():
+    resultado = cotizar(CATALOGO, [{"producto": "lona", "cantidad": "nan"}])
+    assert resultado.items == []
+    assert resultado.invalidos == ["lona"]
+
+
+def test_tiempo_fraccionario_se_redondea_hacia_arriba():
+    producto = dict(LONA, minutos_preparacion=0, minutos_por_unidad=0.2)
+    resultado = cotizar([producto], [{"producto": "lona", "cantidad": 1}])
+    assert resultado.minutos_totales == 1
 
 
 def test_el_texto_incluye_el_total_y_los_no_encontrados():

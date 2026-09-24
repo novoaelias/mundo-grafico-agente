@@ -7,6 +7,7 @@ se monkeypatchea `sheets._abrir_hoja` para devolver una hoja de mentira.
 from __future__ import annotations
 
 import sys
+from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 
@@ -38,8 +39,10 @@ class HojaFalsa:
         self._celda_existente = celda_existente
         self.actualizaciones: list[tuple[list, str]] = []
         self.agregados: list[list] = []
+        self.consultas = []
 
     def find(self, query, in_column=1):
+        self.consultas.append(query)
         return self._celda_existente
 
     def update(self, values, range_name):
@@ -68,6 +71,8 @@ def test_pedido_nuevo_se_agrega(monkeypatch):
     assert fila[2] == "Marisa"
     assert fila[5] == 9000.0
     assert "Lona banner" in fila[4]
+    assert hoja.consultas[0].search("MG-00010") is None
+    assert hoja.consultas[0].search("MG-0001") is not None
 
 
 def test_pedido_existente_se_actualiza_en_su_fila(monkeypatch):
@@ -124,12 +129,26 @@ def test_columna_entregado_solo_si_esta_entregado(monkeypatch):
 def test_sincronizar_pendientes_marca_los_que_salieron_bien(monkeypatch):
     pendientes = [{**PEDIDO, "id": 1, "numero": "MG-0001"}, {**PEDIDO, "id": 2, "numero": "MG-0002"}]
     marcados = []
+    conexiones_activas = [0]
+
+    class PoolFalso:
+        @contextmanager
+        def connection(self):
+            conexiones_activas[0] += 1
+            try:
+                yield object()
+            finally:
+                conexiones_activas[0] -= 1
 
     monkeypatch.setattr(datos, "pendientes_de_sheets", lambda conexion: pendientes)
-    monkeypatch.setattr(datos, "marcar_sincronizado_con_sheets", lambda conexion, pedido_id: marcados.append(pedido_id))
-    monkeypatch.setattr(sheets, "sincronizar_pedido", lambda config, pedido: pedido["numero"] == "MG-0001")
+    monkeypatch.setattr(datos, "marcar_sincronizado_con_sheets", lambda conexion, pedido_id, actualizado_en=None: marcados.append(pedido_id))
+    def sincronizar_sin_transaccion(config, pedido):
+        assert conexiones_activas[0] == 0
+        return pedido["numero"] == "MG-0001"
 
-    cantidad = sheets.sincronizar_pendientes(CONFIG_ACTIVA, conexion=object())
+    monkeypatch.setattr(sheets, "sincronizar_pedido", sincronizar_sin_transaccion)
+
+    cantidad = sheets.sincronizar_pendientes(CONFIG_ACTIVA, PoolFalso())
 
     assert cantidad == 1
     assert marcados == [1]
@@ -139,7 +158,7 @@ def test_sincronizar_pendientes_con_config_apagada_no_consulta_la_base(monkeypat
     consultado = []
     monkeypatch.setattr(datos, "pendientes_de_sheets", lambda conexion: consultado.append(1))
 
-    cantidad = sheets.sincronizar_pendientes(CONFIG_APAGADA, conexion=object())
+    cantidad = sheets.sincronizar_pendientes(CONFIG_APAGADA, pool=None)
 
     assert cantidad == 0
     assert consultado == []

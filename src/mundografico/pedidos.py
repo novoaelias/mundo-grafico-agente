@@ -13,7 +13,8 @@ tablas— las pueda envolver en una sola transacción.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from psycopg import Connection
@@ -49,9 +50,9 @@ def todos_los_productos(conexion: Connection) -> list[dict]:
 def actualizar_producto(conexion: Connection, producto_id: int, cambios: dict[str, Any]) -> dict:
     """Actualiza los campos editables desde el panel.
 
-    Al tocar el precio se apaga `precio_provisorio`: es la señal de que ese
-    número ya lo confirmó una persona y no es más el valor de ejemplo con el
-    que arrancó la demo.
+    Un precio de ejemplo solo se confirma cuando el panel manda
+    `precio_provisorio=False` explícitamente. Guardar otro dato del producto
+    no puede convertir por accidente una tarifa ficticia en real.
     """
     columnas_editables = {
         "nombre", "categoria", "unidad", "precio_unitario", "cantidad_minima",
@@ -61,9 +62,6 @@ def actualizar_producto(conexion: Connection, producto_id: int, cambios: dict[st
     a_aplicar = {k: v for k, v in cambios.items() if k in columnas_editables}
     if not a_aplicar:
         raise ValueError("No hay ningún campo válido para actualizar.")
-
-    if "precio_unitario" in a_aplicar and "precio_provisorio" not in a_aplicar:
-        a_aplicar["precio_provisorio"] = False
 
     if "escalas" in a_aplicar:
         # Sin este envoltorio, psycopg adapta una lista de Python como
@@ -140,6 +138,10 @@ def actualizar_taller(conexion: Connection, cambios: dict[str, Any]) -> dict:
     a_aplicar = {k: v for k, v in cambios.items() if k in columnas_editables}
     if not a_aplicar:
         raise ValueError("No hay ningún campo válido para actualizar.")
+    if "minutos_por_dia" in a_aplicar and a_aplicar["minutos_por_dia"] <= 0:
+        raise ValueError("La capacidad diaria debe ser mayor a cero.")
+    if "dias_habiles" in a_aplicar and not a_aplicar["dias_habiles"]:
+        raise ValueError("Elegí al menos un día hábil para el taller.")
 
     columnas = ", ".join(f"{c} = %({c})s" for c in a_aplicar)
     conexion.execute(f"UPDATE mundografico.taller SET {columnas} WHERE id = 1", a_aplicar)
@@ -240,6 +242,7 @@ def crear_pedido(
     contacto_id: str = "",
     notas: str = "",
     estado_pago: str = "a_cobrar",
+    permitir_precios_provisorios: bool = False,
 ) -> dict:
     """Cotiza, calcula la fecha y guarda el pedido, todo en una transacción.
 
@@ -265,10 +268,17 @@ def crear_pedido(
     productos = productos_activos(conexion)
     cotizacion = catalogo.cotizar(productos, items)
 
-    if not cotizacion.items:
+    if not cotizacion.completa:
         raise PedidoInvalido(
-            "No hay ningún producto reconocido para armar el pedido: "
-            + ("; ".join(f"no encontré '{n}'" for n in cotizacion.no_encontrados) or "la lista vino vacía")
+            "No se puede tomar el pedido completo. " + cotizacion.texto()
+        )
+
+    if not permitir_precios_provisorios and any(
+        item.precio_provisorio for item in cotizacion.items
+    ):
+        raise PedidoInvalido(
+            "Hay precios de ejemplo sin confirmar con Mundo Gráfico. "
+            "Pedí intervención humana antes de tomar este pedido."
         )
 
     taller = obtener_taller(conexion)
@@ -345,7 +355,16 @@ def pedido_con_cliente(conexion: Connection, pedido_id: int) -> dict | None:
     ).fetchone()
 
 
-def pedido_por_numero(conexion: Connection, numero: str) -> dict | None:
+def pedido_por_numero(
+    conexion: Connection, numero: str, conversacion_id: str | None = None,
+) -> dict | None:
+    """La consulta del bot se restringe a la conversación del cliente."""
+    if conversacion_id is not None:
+        return conexion.execute(
+            "SELECT * FROM mundografico.pedidos "
+            "WHERE numero = %s AND conversacion_id = %s",
+            (numero, conversacion_id),
+        ).fetchone()
     return conexion.execute(
         "SELECT * FROM mundografico.pedidos WHERE numero = %s", (numero,)
     ).fetchone()
@@ -391,37 +410,68 @@ def marcar_listo(conexion: Connection, pedido_id: int) -> dict:
     pedido = conexion.execute(
         """
         UPDATE mundografico.pedidos
-        SET estado = 'listo', avisado_listo_en = now(), actualizado_en = now(),
+        SET estado = 'listo', actualizado_en = now(),
             pendiente_sheets = TRUE
-        WHERE id = %s AND estado != 'listo'
+        WHERE id = %s AND estado IN ('pendiente', 'en_proceso')
         RETURNING *
         """,
         (pedido_id,),
     ).fetchone()
 
     if pedido is None:
-        raise ValueError(f"El pedido {pedido_id} no existe o ya estaba listo.")
+        raise ValueError(f"El pedido {pedido_id} no existe o ya no está en producción.")
 
     _registrar_evento(conexion, pedido_id, "cambio_estado", {"a": "listo"})
     return pedido
 
 
-def marcar_entregado(conexion: Connection, pedido_id: int, monto_cobrado: float) -> dict:
+def registrar_aviso_enviado(conexion: Connection, pedido_id: int) -> dict:
+    """Anota el envío solo después de una respuesta exitosa de Chatwoot."""
     pedido = conexion.execute(
         """
         UPDATE mundografico.pedidos
-        SET estado = 'entregado', estado_pago = 'pagado', monto_cobrado = %s,
-            entregado_en = now(), actualizado_en = now(), pendiente_sheets = TRUE
-        WHERE id = %s
+        SET avisado_listo_en = now(), actualizado_en = now()
+        WHERE id = %s AND estado = 'listo' AND avisado_listo_en IS NULL
         RETURNING *
         """,
-        (monto_cobrado, pedido_id),
+        (pedido_id,),
+    ).fetchone()
+    if pedido is None:
+        raise ValueError(f"El pedido {pedido_id} no está listo o ya fue avisado.")
+    _registrar_evento(conexion, pedido_id, "aviso_enviado", {})
+    return pedido
+
+
+def marcar_entregado(conexion: Connection, pedido_id: int, monto_cobrado: Decimal | float) -> dict:
+    try:
+        monto = Decimal(str(monto_cobrado))
+    except InvalidOperation as e:
+        raise ValueError("El monto cobrado no es válido.") from e
+    pedido_actual = conexion.execute(
+        "SELECT total, estado FROM mundografico.pedidos WHERE id = %s FOR UPDATE",
+        (pedido_id,),
+    ).fetchone()
+    if pedido_actual is None or pedido_actual["estado"] != "listo":
+        raise ValueError(f"El pedido {pedido_id} tiene que estar listo antes de entregarse.")
+    if not monto.is_finite() or monto < 0 or monto > pedido_actual["total"]:
+        raise ValueError("El monto cobrado debe estar entre cero y el total del pedido.")
+
+    estado_pago = "pagado" if monto == pedido_actual["total"] else ("señado" if monto > 0 else "a_cobrar")
+    pedido = conexion.execute(
+        """
+        UPDATE mundografico.pedidos
+        SET estado = 'entregado', estado_pago = %s, monto_cobrado = %s,
+            entregado_en = now(), actualizado_en = now(), pendiente_sheets = TRUE
+        WHERE id = %s AND estado = 'listo'
+        RETURNING *
+        """,
+        (estado_pago, monto, pedido_id),
     ).fetchone()
 
     if pedido is None:
         raise ValueError(f"No existe el pedido {pedido_id}.")
 
-    _registrar_evento(conexion, pedido_id, "cambio_estado", {"a": "entregado", "monto_cobrado": monto_cobrado})
+    _registrar_evento(conexion, pedido_id, "cambio_estado", {"a": "entregado", "monto_cobrado": float(monto)})
     return pedido
 
 
@@ -449,14 +499,14 @@ def cancelar_pedido(conexion: Connection, pedido_id: int, motivo: str = "") -> d
         """
         UPDATE mundografico.pedidos
         SET estado = 'cancelado', actualizado_en = now(), pendiente_sheets = TRUE
-        WHERE id = %s
+        WHERE id = %s AND estado IN ('pendiente', 'en_proceso', 'listo')
         RETURNING *
         """,
         (pedido_id,),
     ).fetchone()
 
     if pedido is None:
-        raise ValueError(f"No existe el pedido {pedido_id}.")
+        raise ValueError(f"El pedido {pedido_id} no se puede cancelar en su estado actual.")
 
     # No se borra asignacion_agenda: es historial. comprometido_por_dia ya
     # filtra por estado activo, así que un pedido cancelado deja de pesar
@@ -478,11 +528,21 @@ def pendientes_de_sheets(conexion: Connection) -> list[dict]:
     ).fetchall()
 
 
-def marcar_sincronizado_con_sheets(conexion: Connection, pedido_id: int) -> None:
-    conexion.execute(
-        "UPDATE mundografico.pedidos SET pendiente_sheets = FALSE WHERE id = %s",
-        (pedido_id,),
-    )
+def marcar_sincronizado_con_sheets(
+    conexion: Connection, pedido_id: int, actualizado_en=None,
+) -> None:
+    """No borra un cambio de estado que ocurrió mientras Google respondía."""
+    if actualizado_en is None:
+        conexion.execute(
+            "UPDATE mundografico.pedidos SET pendiente_sheets = FALSE WHERE id = %s",
+            (pedido_id,),
+        )
+    else:
+        conexion.execute(
+            "UPDATE mundografico.pedidos SET pendiente_sheets = FALSE "
+            "WHERE id = %s AND actualizado_en = %s",
+            (pedido_id, actualizado_en),
+        )
 
 
 # ---------------------------------------------------------------------------

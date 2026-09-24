@@ -3,6 +3,8 @@
   <td>
     <div class="cliente-nombre">{{ pedido.cliente_nombre or '(sin nombre)' }}</div>
     {% if pedido.cliente_telefono %}<div class="cliente-telefono">{{ pedido.cliente_telefono }}</div>{% endif %}
+    <div id="bot-{{ pedido.id }}" hx-get="/panel/pedidos/{{ pedido.id }}/bot"
+         hx-trigger="revealed" hx-swap="outerHTML" class="estado-bot">Estado del bot…</div>
   </td>
   <td class="detalle">
     {% for item in pedido.detalle %}
@@ -29,6 +31,15 @@
         Cancelar
       </button>
     {% elif pedido.estado == 'listo' %}
+      {% if not pedido.avisado_listo_en %}
+        <span class="aviso-pendiente">⚠ Aviso pendiente</span>
+        <button class="boton boton-listo"
+                hx-post="/panel/pedidos/{{ pedido.id }}/aviso"
+                hx-target="#pedido-{{ pedido.id }}" hx-swap="outerHTML"
+                hx-confirm="Revisá la conversación en Chatwoot: si el aviso ya llegó, reintentarlo puede duplicarlo. ¿Enviar ahora?">
+          Reintentar aviso
+        </button>
+      {% endif %}
       <form class="form-entregar"
             hx-post="/panel/pedidos/{{ pedido.id }}/entregado"
             hx-target="#pedido-{{ pedido.id }}" hx-swap="outerHTML">

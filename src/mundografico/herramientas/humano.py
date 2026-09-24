@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from ._contexto import conversacion_de, obtener as contexto
+
+registro = logging.getLogger("mundografico.herramientas.humano")
 
 
 @tool
@@ -27,8 +31,18 @@ def pasar_a_humano(motivo: str, config: RunnableConfig) -> str:
     conversacion = conversacion_de(config)
     ctx = contexto()
 
-    ctx.chatwoot.nota_privada(conversacion, f"🤖 Derivado por el bot: {motivo}")
-    ctx.chatwoot.agregar_etiqueta(conversacion, ctx.etiqueta_humano)
+    try:
+        ctx.chatwoot.agregar_etiqueta(conversacion, ctx.etiqueta_humano)
+    except Exception:
+        registro.exception("No se pudo derivar la conversación %s", conversacion)
+        return "No pude derivar esta conversación automáticamente. Pedí que contacten al local por otro canal."
+
+    try:
+        ctx.chatwoot.nota_privada(conversacion, f"🤖 Derivado por el bot: {motivo}")
+    except Exception:
+        # La etiqueta ya apagó al bot; el traspaso se hizo aunque la nota
+        # interna no haya llegado.
+        registro.exception("Se derivó %s pero falló la nota privada", conversacion)
 
     return (
         "Ya avisé al equipo, en un momento te responde una persona. "

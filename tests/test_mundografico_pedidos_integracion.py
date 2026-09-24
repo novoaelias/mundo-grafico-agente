@@ -57,6 +57,10 @@ def conexion():
             archivo = base_datos.CARPETA_MIGRACIONES / nombre
             prep.execute(archivo.read_text(encoding="utf-8"))
             prep.commit()
+        # Esta suite prueba el flujo de pedidos reales con un catálogo ya
+        # validado. El seed sin validar se prueba por separado.
+        prep.execute("UPDATE mundografico.productos SET precio_provisorio = FALSE")
+        prep.commit()
 
     with pool.connection() as c:
         yield c
@@ -94,6 +98,7 @@ def test_crea_un_pedido_completo(conexion):
     guardado = pedidos.pedido_por_numero(conexion, "MG-0001")
     assert guardado is not None
     assert guardado["conversacion_id"] == "conv-1"
+    assert pedidos.pedido_por_numero(conexion, "MG-0001", "otra-conversacion") is None
 
 
 def test_los_numeros_de_pedido_son_correlativos(conexion):
@@ -129,6 +134,31 @@ def test_sin_productos_reconocidos_no_crea_nada(conexion):
             conexion, "conv-1", [{"producto": "un dron", "cantidad": 1}],
             hoy=date(2026, 9, 21),
         )
+
+
+def test_no_crea_pedido_parcial(conexion):
+    with pytest.raises(pedidos.PedidoInvalido):
+        pedidos.crear_pedido(
+            conexion, "conv-1", [
+                {"producto": "sello", "cantidad": 1},
+                {"producto": "un dron", "cantidad": 1},
+            ], hoy=date(2026, 9, 21),
+        )
+    assert pedidos.pedidos_de_conversacion(conexion, "conv-1") == []
+
+
+def test_precio_provisorio_solo_se_acepta_en_modo_demo(conexion):
+    conexion.execute("UPDATE mundografico.productos SET precio_provisorio = TRUE WHERE nombre = 'Sello automático'")
+    with pytest.raises(pedidos.PedidoInvalido, match="precios de ejemplo"):
+        pedidos.crear_pedido(
+            conexion, "conv-1", [{"producto": "sello", "cantidad": 1}],
+            hoy=date(2026, 9, 21),
+        )
+    pedido = pedidos.crear_pedido(
+        conexion, "conv-1", [{"producto": "sello", "cantidad": 1}],
+        hoy=date(2026, 9, 21), permitir_precios_provisorios=True,
+    )
+    assert pedido["numero"].startswith("MG-")
 
 
 def test_el_mismo_conversacion_id_reusa_el_cliente(conexion):
@@ -211,7 +241,10 @@ def test_marcar_listo_y_despues_entregado(conexion):
 
     listo = pedidos.marcar_listo(conexion, pedido["id"])
     assert listo["estado"] == "listo"
-    assert listo["avisado_listo_en"] is not None
+    assert listo["avisado_listo_en"] is None
+
+    avisado = pedidos.registrar_aviso_enviado(conexion, pedido["id"])
+    assert avisado["avisado_listo_en"] is not None
 
     entregado = pedidos.marcar_entregado(conexion, pedido["id"], monto_cobrado=6500)
     conexion.commit()
@@ -224,7 +257,7 @@ def test_marcar_listo_y_despues_entregado(conexion):
         "SELECT tipo FROM mundografico.eventos_pedido WHERE pedido_id = %s ORDER BY id",
         (pedido["id"],),
     ).fetchall()
-    assert [e["tipo"] for e in eventos] == ["creado", "cambio_estado", "cambio_estado"]
+    assert [e["tipo"] for e in eventos] == ["creado", "cambio_estado", "aviso_enviado", "cambio_estado"]
 
 
 def test_marcar_listo_dos_veces_avisa(conexion):
@@ -238,6 +271,38 @@ def test_marcar_listo_dos_veces_avisa(conexion):
 
     with pytest.raises(ValueError):
         pedidos.marcar_listo(conexion, pedido["id"])
+
+
+def test_aviso_solo_se_registra_una_vez_despues_del_envio(conexion):
+    pedido = pedidos.crear_pedido(
+        conexion, "conv-1", [{"producto": "sello", "cantidad": 1}], hoy=date(2026, 9, 21),
+    )
+    pedidos.marcar_listo(conexion, pedido["id"])
+    assert pedidos.pedido_por_numero(conexion, pedido["numero"])["avisado_listo_en"] is None
+    pedidos.registrar_aviso_enviado(conexion, pedido["id"])
+    with pytest.raises(ValueError):
+        pedidos.registrar_aviso_enviado(conexion, pedido["id"])
+
+
+def test_entrega_parcial_no_se_marca_pagada(conexion):
+    pedido = pedidos.crear_pedido(
+        conexion, "conv-1", [{"producto": "sello", "cantidad": 1}], hoy=date(2026, 9, 21),
+    )
+    pedidos.marcar_listo(conexion, pedido["id"])
+    entregado = pedidos.marcar_entregado(conexion, pedido["id"], monto_cobrado=1000)
+    assert entregado["estado_pago"] == "señado"
+    assert float(entregado["monto_cobrado"]) == 1000
+    with pytest.raises(ValueError):
+        pedidos.cancelar_pedido(conexion, pedido["id"])
+
+
+def test_entrega_rechaza_monto_mayor_al_total(conexion):
+    pedido = pedidos.crear_pedido(
+        conexion, "conv-1", [{"producto": "sello", "cantidad": 1}], hoy=date(2026, 9, 21),
+    )
+    pedidos.marcar_listo(conexion, pedido["id"])
+    with pytest.raises(ValueError, match="entre cero"):
+        pedidos.marcar_entregado(conexion, pedido["id"], monto_cobrado=10000)
 
 
 # -- Catálogo desde el panel ------------------------------------------------------
@@ -274,14 +339,17 @@ def test_actualizar_producto_con_escalas_de_verdad_no_revienta(conexion):
     assert actualizado["escalas"] == [{"desde": 10, "precio_unitario": 6000}]
 
 
-def test_actualizar_precio_apaga_precio_provisorio(conexion):
+def test_actualizar_precio_sin_confirmar_mantiene_provisorio(conexion):
     id_sello = id_de_producto(conexion, "Sello automático")
 
     actualizado = pedidos.actualizar_producto(conexion, id_sello, {"precio_unitario": 7000})
     conexion.commit()
 
     assert float(actualizado["precio_unitario"]) == 7000
-    assert actualizado["precio_provisorio"] is False
+    assert actualizado["precio_provisorio"] is True
+
+    confirmado = pedidos.actualizar_producto(conexion, id_sello, {"precio_provisorio": False})
+    assert confirmado["precio_provisorio"] is False
 
 
 # -- Sheets: la cola de reintentos ------------------------------------------------
@@ -301,3 +369,18 @@ def test_pendientes_de_sheets_y_marcar_sincronizado(conexion):
 
     pendientes = pedidos.pendientes_de_sheets(conexion)
     assert pedido["id"] not in [p["id"] for p in pendientes]
+
+
+def test_sheets_no_borra_una_actualizacion_posterior(conexion):
+    pedido = pedidos.crear_pedido(
+        conexion, "conv-1", [{"producto": "sello", "cantidad": 1}], hoy=date(2026, 9, 21),
+    )
+    version_vieja = pedido["actualizado_en"]
+    conexion.execute(
+        "UPDATE mundografico.pedidos SET actualizado_en = actualizado_en + interval '1 second' "
+        "WHERE id = %s",
+        (pedido["id"],),
+    )
+    pedidos.marcar_sincronizado_con_sheets(conexion, pedido["id"], version_vieja)
+    fila = pedidos.pedido_por_numero(conexion, pedido["numero"])
+    assert fila["pendiente_sheets"] is True

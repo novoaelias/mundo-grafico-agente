@@ -10,13 +10,17 @@ proyecto, no en la explicación técnica.
 - [ ] El inbox de Telegram está conectado en Chatwoot y el webhook apunta
       bien (mandate un mensaje de prueba vos mismo).
 - [ ] Entraste al panel (`/panel/pedidos`) y ves los pedidos de demo.
+- [ ] Configuraste `MG_MODO_DEMO=true` y ejecutaste `python preparar_demo.py`
+      hoy. El pedido `DEMO-002` debe ocupar los 300 minutos del primer día hábil.
 - [ ] Tenés a mano el usuario y clave del panel para no estar buscándolo
       delante del cliente.
 - [ ] Ojeaste `prompts/sistema.md`: si ya tenés datos reales del local
       (horario, dirección), están cargados ahí y en el .env.
-- [ ] Si conseguiste la lista de precios real, cargala en el catálogo
-      antes de la demo — cotizar con un precio inventado en frente del
-      dueño de la imprenta es lo único que puede jugar en contra.
+- [ ] Los precios del PDF tienen unidad y condición comercial confirmadas.
+      Si todavía no, usá los precios de demostración y decí claramente que
+      el dueño debe validarlos antes de atender clientes reales.
+- [ ] Sheets está conectado y la cuenta de servicio tiene permiso de editor;
+      si no, el paso 7 del guion aún no se puede mostrar en vivo.
 
 ## Los siete pasos
 
@@ -27,19 +31,21 @@ sienta real y no una presentación armada.
 
 **2. Que pregunte un precio.**
 Algo de lo que él vende todos los días — una lona, unas tarjetas. El bot
-cotiza con los números reales (o los de ejemplo, aclarando que se
-reemplazan en un minuto desde el panel).
+cotiza con números confirmados, o con los de ejemplo señalados como
+demostración. No presentes el importe provisorio como precio de venta.
 
 **3. Que pida algo para hoy mismo, con un pedido grande.**
 Acá está el momento fuerte de la demo: la agenda de hoy ya tiene un
 pedido que ocupa el taller entero (viene precargado). El bot le va a
 decir que no llega para hoy y le va a ofrecer la primera fecha real.
+Si hoy es feriado, domingo o ya pasó la hora de corte, la explicación será
+distinta; hacé este paso en horario hábil para mostrar la carga del taller.
 **Esto es lo que se vende**: hoy esa cuenta la hace él, de memoria, bajo
 presión, con el cliente esperando.
 
 **4. Que cierre el pedido.**
 Confirma cantidad y forma de pago, el bot lo anota y le da un número de
-pedido.
+pedido. Con `MG_MODO_DEMO=true` queda rotulado como pedido de demostración.
 
 **5. Mostrale el panel mientras tanto.**
 El pedido que acaba de hacer ya está en `/panel/pedidos`, con el total y
@@ -58,13 +64,16 @@ constancia.
 
 ## Un par de pruebas extra si da el tiempo
 
-- Escribí vos mismo en el chat de Chatwoot: el bot se calla al instante.
-  Es la garantía de que nunca va a hablar por encima de una persona.
+- Agregá la etiqueta `humano` a la conversación en Chatwoot y escribí
+  desde la bandeja: el bot debe callarse ante los siguientes mensajes del
+  cliente. Verificá en el panel “Bot en pausa” y probá “Reanudar” después
+  de que termines tu intervención. Escribir como operador, sin poner la
+  etiqueta, no pausa automáticamente al bot.
 - Mandale al bot un pedido de algo que no está en el catálogo: tiene que
   decir que no lo encuentra, no inventar un precio.
 - Cambiá un precio desde el panel (pestaña Catálogo) y volvé a cotizar
   ese mismo producto en el chat: el bot ya usa el precio nuevo, sin
-  reiniciar nada.
+  reiniciar nada. Si era un precio de ejemplo, confirmalo con el checkbox.
 
 ## Después de la demo
 

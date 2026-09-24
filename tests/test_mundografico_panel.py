@@ -45,9 +45,16 @@ PEDIDO = {
 class ChatwootFalso:
     def __init__(self):
         self.mensajes: list[tuple[str, str]] = []
+        self.labels = ["humano", "urgente"]
 
     def enviar_mensaje(self, conversacion_id, texto):
         self.mensajes.append((conversacion_id, texto))
+
+    def etiquetas(self, conversacion_id):
+        return self.labels
+
+    def quitar_etiqueta(self, conversacion_id, etiqueta):
+        self.labels = [label for label in self.labels if label != etiqueta]
 
 
 class PoolFalso:
@@ -129,10 +136,36 @@ def test_lista_de_pedidos_muestra_la_carga_de_hoy(cliente, monkeypatch):
     assert "TALLER LLENO" in respuesta.text
 
 
+def test_panel_muestra_bot_pausado_y_lo_reanuda(cliente, monkeypatch, chatwoot):
+    monkeypatch.setattr(datos, "pedido_con_cliente", lambda conexion, pedido_id: PEDIDO)
+    estado = cliente.get("/panel/pedidos/1/bot", auth=CREDENCIALES)
+    assert estado.status_code == 200
+    assert "Bot en pausa" in estado.text
+
+    reanudado = cliente.post("/panel/pedidos/1/reanudar-bot", auth=CREDENCIALES)
+    assert reanudado.status_code == 200
+    assert "Bot activo" in reanudado.text
+    assert chatwoot.labels == ["urgente"]
+
+
+def test_panel_no_finge_estado_bot_si_chatwoot_falla(cliente, monkeypatch, chatwoot):
+    monkeypatch.setattr(datos, "pedido_con_cliente", lambda conexion, pedido_id: PEDIDO)
+
+    def falla(conversacion_id):
+        raise ConnectionError("Chatwoot caído")
+
+    chatwoot.etiquetas = falla
+    estado = cliente.get("/panel/pedidos/1/bot", auth=CREDENCIALES)
+    assert estado.status_code == 200
+    assert "Estado no disponible" in estado.text
+    assert "Bot activo" not in estado.text
+
+
 def test_marcar_listo_avisa_por_chatwoot_y_devuelve_la_fila(cliente, monkeypatch, chatwoot):
-    pedido_listo = {**PEDIDO, "estado": "listo"}
+    pedido_listo = {**PEDIDO, "estado": "listo", "avisado_listo_en": None}
     monkeypatch.setattr(datos, "marcar_listo", lambda conexion, pedido_id: pedido_listo)
     monkeypatch.setattr(datos, "pedido_con_cliente", lambda conexion, pedido_id: pedido_listo)
+    monkeypatch.setattr(datos, "registrar_aviso_enviado", lambda conexion, pedido_id: pedido_listo.update(avisado_listo_en="ahora"))
 
     respuesta = cliente.post("/panel/pedidos/1/listo", auth=CREDENCIALES)
 
@@ -142,6 +175,7 @@ def test_marcar_listo_avisa_por_chatwoot_y_devuelve_la_fila(cliente, monkeypatch
     assert conversacion == "conv-1"
     assert "MG-0001" in texto
     assert "listo" in texto.lower()
+    assert "Aviso pendiente" not in respuesta.text
     assert "Guardar" not in respuesta.text  # es la fila del pedido, no la de catálogo
 
 
@@ -150,12 +184,27 @@ def test_marcar_listo_no_revienta_si_chatwoot_falla(cliente, monkeypatch, chatwo
         raise ConnectionError("caído")
 
     chatwoot.enviar_mensaje = explota
-    monkeypatch.setattr(datos, "marcar_listo", lambda conexion, pedido_id: PEDIDO)
-    monkeypatch.setattr(datos, "pedido_con_cliente", lambda conexion, pedido_id: PEDIDO)
+    pedido_listo = {**PEDIDO, "estado": "listo", "avisado_listo_en": None}
+    monkeypatch.setattr(datos, "marcar_listo", lambda conexion, pedido_id: pedido_listo)
+    monkeypatch.setattr(datos, "pedido_con_cliente", lambda conexion, pedido_id: pedido_listo)
 
     respuesta = cliente.post("/panel/pedidos/1/listo", auth=CREDENCIALES)
 
     assert respuesta.status_code == 200, "marcar listo no puede fallar porque el aviso falló"
+    assert "Aviso pendiente" in respuesta.text
+    assert "Reintentar aviso" in respuesta.text
+
+
+def test_reintentar_aviso_pendiente(cliente, monkeypatch, chatwoot):
+    pedido_listo = {**PEDIDO, "estado": "listo", "avisado_listo_en": None}
+    monkeypatch.setattr(datos, "pedido_con_cliente", lambda conexion, pedido_id: pedido_listo)
+    monkeypatch.setattr(datos, "registrar_aviso_enviado", lambda conexion, pedido_id: pedido_listo.update(avisado_listo_en="ahora"))
+
+    respuesta = cliente.post("/panel/pedidos/1/aviso", auth=CREDENCIALES)
+
+    assert respuesta.status_code == 200
+    assert len(chatwoot.mensajes) == 1
+    assert "Aviso pendiente" not in respuesta.text
 
 
 def test_marcar_entregado_manda_el_monto(cliente, monkeypatch):
@@ -226,6 +275,23 @@ def test_actualizar_producto_apaga_activo_cuando_no_llega_el_checkbox(cliente, m
     assert respuesta.status_code == 200
     assert capturado["activo"] is False
     assert capturado["precio_unitario"] == 7000.0
+    assert "precio_provisorio" not in capturado
+
+
+def test_precio_provisorio_requiere_confirmacion_explicita(cliente, monkeypatch):
+    capturado = {}
+
+    def actualizar_falso(conexion, producto_id, cambios):
+        capturado.update(cambios)
+        return {**PRODUCTO, **cambios}
+
+    monkeypatch.setattr(datos, "actualizar_producto", actualizar_falso)
+    respuesta = cliente.post(
+        "/panel/catalogo/5", auth=CREDENCIALES,
+        data={"nombre": "Sello automático", "precio_unitario": "7000", "confirmar_precio": "true"},
+    )
+    assert respuesta.status_code == 200
+    assert capturado["precio_provisorio"] is False
 
 
 def test_crear_producto_nuevo(cliente, monkeypatch):
@@ -290,17 +356,9 @@ def test_actualizar_taller_parsea_dias_y_feriados(cliente, monkeypatch):
     assert capturado["feriados"] == [date(2026, 12, 25), date(2027, 1, 1), date(2027, 7, 9)]
 
 
-def test_actualizar_taller_sin_dias_marcados_manda_lista_vacia(cliente, monkeypatch):
-    capturado = {}
-    monkeypatch.setattr(
-        datos, "actualizar_taller",
-        lambda conexion, cambios: capturado.update(cambios) or TALLER,
-    )
-
+def test_actualizar_taller_sin_dias_marcados_rechaza(cliente):
     respuesta = cliente.post(
         "/panel/taller", auth=CREDENCIALES,
         data={"minutos_por_dia": "300", "hora_corte_mismo_dia": "15:00", "feriados": ""},
     )
-
-    assert respuesta.status_code == 200
-    assert capturado["dias_habiles"] == []
+    assert respuesta.status_code == 422

@@ -26,8 +26,8 @@ from __future__ import annotations
 
 import json
 import logging
-
-from psycopg import Connection
+import re
+import threading
 
 from . import pedidos as datos
 from .config import ConfigSheets
@@ -40,6 +40,7 @@ ENCABEZADOS = [
 ]
 
 _hoja_cacheada = None  # abrir la hoja tarda un viaje de red; no cambia entre pedidos
+_candado_hoja = threading.Lock()
 
 
 def sincronizar_pedido(config: ConfigSheets, pedido: dict) -> bool:
@@ -54,14 +55,19 @@ def sincronizar_pedido(config: ConfigSheets, pedido: dict) -> bool:
         return False
 
     try:
-        hoja = _abrir_hoja(config)
-        fila = _fila_de(pedido)
+        # El bot y el reintento periódico comparten proceso. Sin el candado,
+        # ambos pueden observar "no existe" y agregar dos filas iguales.
+        with _candado_hoja:
+            hoja = _abrir_hoja(config)
+            fila = _fila_de(pedido)
 
-        celda = hoja.find(str(pedido["numero"]), in_column=1)
-        if celda:
-            hoja.update([fila], range_name=f"A{celda.row}:{_ultima_columna()}{celda.row}")
-        else:
-            hoja.append_row(fila)
+            # gspread usa búsqueda de texto/regex; sin anclas, MG-0001 puede
+            # coincidir con MG-00010 y terminar pisando otra venta.
+            celda = hoja.find(re.compile(r"^" + re.escape(str(pedido["numero"])) + r"$"), in_column=1)
+            if celda:
+                hoja.update([fila], range_name=f"A{celda.row}:{_ultima_columna()}{celda.row}")
+            else:
+                hoja.append_row(fila)
 
         return True
     except Exception as e:
@@ -72,7 +78,7 @@ def sincronizar_pedido(config: ConfigSheets, pedido: dict) -> bool:
         return False
 
 
-def sincronizar_pendientes(config: ConfigSheets, conexion: Connection) -> int:
+def sincronizar_pendientes(config: ConfigSheets, pool) -> int:
     """Reintenta todos los pedidos que quedaron sin escribir en Sheets.
 
     Devuelve cuántos se pudieron sincronizar recién ahora.
@@ -80,10 +86,18 @@ def sincronizar_pendientes(config: ConfigSheets, conexion: Connection) -> int:
     if not config.activo:
         return 0
 
+    # La API de Google puede tardar varios segundos. Soltamos la conexión
+    # antes de salir a la red para no retener una transacción del pool.
+    with pool.connection() as conexion:
+        pendientes = datos.pendientes_de_sheets(conexion)
+
     sincronizados = 0
-    for pedido in datos.pendientes_de_sheets(conexion):
+    for pedido in pendientes:
         if sincronizar_pedido(config, pedido):
-            datos.marcar_sincronizado_con_sheets(conexion, pedido["id"])
+            with pool.connection() as conexion:
+                datos.marcar_sincronizado_con_sheets(
+                    conexion, pedido["id"], pedido.get("actualizado_en"),
+                )
             sincronizados += 1
 
     return sincronizados

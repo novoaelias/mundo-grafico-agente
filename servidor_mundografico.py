@@ -42,7 +42,8 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 from agente import ErrorDeConfiguracion  # noqa: E402
 from agente import Config as ConfigAgente  # noqa: E402
 from agente.web.webhook import crear_app  # noqa: E402
-from mundografico import base_datos, herramientas, panel, sheets  # noqa: E402
+from mundografico.canal import ChatwootMundoGrafico  # noqa: E402
+from mundografico import base_datos, demo, herramientas, horario, panel, sheets  # noqa: E402
 from mundografico.chatwoot_api import ClienteChatwoot  # noqa: E402
 from mundografico.config import Config as ConfigNegocio  # noqa: E402
 from mundografico.config import ErrorDeConfiguracion as ErrorDeConfiguracionMG  # noqa: E402
@@ -66,7 +67,12 @@ def construir_app(config_agente: ConfigAgente, config_mg: ConfigNegocio) -> Fast
     Separado de `main()` para poder probarlo con configs de prueba, sin
     levantar un servidor de verdad (ver tests/test_mundografico_servidor.py).
     """
-    aplicadas = base_datos.aplicar_migraciones(config_mg.postgres_dsn)
+    aplicadas = base_datos.aplicar_migraciones(
+        config_mg.postgres_dsn, incluir_demo=config_mg.negocio.modo_demo,
+    )
+    if config_mg.negocio.modo_demo:
+        with base_datos.obtener_pool().connection() as conexion:
+            demo.preparar_demo(conexion, horario.hoy())
 
     herramientas.inicializar(
         chatwoot_url=config_agente.chatwoot_url,
@@ -77,7 +83,13 @@ def construir_app(config_agente: ConfigAgente, config_mg: ConfigNegocio) -> Fast
         sheets=config_mg.sheets,
     )
 
-    app = crear_app(config_agente)
+    canal = ChatwootMundoGrafico(
+        url=config_agente.chatwoot_url,
+        token=config_agente.chatwoot_token,
+        cuenta_id=config_agente.chatwoot_cuenta_id,
+        etiqueta_humano=config_agente.chatwoot_etiqueta_humano,
+    )
+    app = crear_app(config_agente, canal=canal)
 
     app.mount(
         "/panel/estaticos",
@@ -90,7 +102,9 @@ def construir_app(config_agente: ConfigAgente, config_mg: ConfigNegocio) -> Fast
         token=config_agente.chatwoot_token,
         cuenta_id=config_agente.chatwoot_cuenta_id,
     )
-    app.include_router(panel.crear_router(config_mg, cliente_chatwoot_panel))
+    app.include_router(panel.crear_router(
+        config_mg, cliente_chatwoot_panel, config_agente.chatwoot_etiqueta_humano,
+    ))
 
     app.state.migraciones_aplicadas = aplicadas
     return app
@@ -145,8 +159,9 @@ def _reintentar_sheets_periodicamente(config_mg: ConfigNegocio) -> None:
     while True:
         time.sleep(INTERVALO_REINTENTO_SHEETS)
         try:
-            with base_datos.obtener_pool().connection() as conexion:
-                cantidad = sheets.sincronizar_pendientes(config_mg.sheets, conexion)
+            cantidad = sheets.sincronizar_pendientes(
+                config_mg.sheets, base_datos.obtener_pool(),
+            )
             if cantidad:
                 registro.info("Reintento periódico: %d pedido(s) sincronizados con Sheets", cantidad)
         except Exception as e:

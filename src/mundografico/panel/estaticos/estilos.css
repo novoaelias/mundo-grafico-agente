@@ -156,6 +156,11 @@ tbody tr:hover { background: #fcfbfa; }
 .numero { font-weight: 700; white-space: nowrap; }
 .cliente-nombre { font-weight: 600; }
 .cliente-telefono { color: var(--tinta-suave); font-size: 0.8rem; }
+.estado-bot { margin-top: 5px; font-size: 0.75rem; color: var(--tinta-suave); }
+.bot-pausado { background: var(--acento-suave); color: var(--acento); }
+.bot-activo { color: var(--verde); }
+.bot-desconocido { color: var(--rojo); }
+.boton-reanudar { padding: 3px 6px; margin-left: 3px; color: var(--azul); background: var(--azul-suave); }
 .detalle { font-size: 0.85rem; color: var(--tinta-suave); }
 .detalle .notas { margin-top: 4px; color: var(--acento); font-style: italic; }
 .total { font-weight: 700; white-space: nowrap; }
@@ -226,6 +231,8 @@ tr.estado-cancelado { opacity: 0.55; }
 .input-nombre { min-width: 140px; }
 .escalas-solo-lectura { font-size: 0.78rem; color: var(--tinta-suave); }
 .marca-provisorio { color: var(--acento); font-size: 0.72rem; display: block; margin-top: 2px; }
+.confirmar-precio { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 0.72rem; color: var(--acento); }
+.tabla-catalogo .confirmar-precio input { width: auto; margin: 0; }
 tr.inactivo { opacity: 0.5; }
 .centro { text-align: center; }
 

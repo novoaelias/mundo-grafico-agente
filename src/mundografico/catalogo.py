@@ -20,6 +20,7 @@ los datos de verdad.
 from __future__ import annotations
 
 import unicodedata
+import math
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
@@ -48,6 +49,7 @@ class ItemCotizado:
     # cobra de más en silencio, se explica por qué el total no es el que
     # esperaba quien pregunta.
     aviso: str = ""
+    precio_provisorio: bool = False
 
 
 @dataclass
@@ -56,10 +58,16 @@ class Cotizacion:
     total: float = 0.0
     minutos_totales: int = 0
     no_encontrados: list[str] = field(default_factory=list)
+    ambiguos: list[str] = field(default_factory=list)
+    invalidos: list[str] = field(default_factory=list)
+
+    @property
+    def completa(self) -> bool:
+        return bool(self.items) and not (self.no_encontrados or self.ambiguos or self.invalidos)
 
     def texto(self) -> str:
         """La cotización redactada para que el modelo se la pase a la persona."""
-        if not self.items and not self.no_encontrados:
+        if not self.items and not (self.no_encontrados or self.ambiguos or self.invalidos):
             return "No hay nada para cotizar."
 
         lineas = []
@@ -73,8 +81,19 @@ class Cotizacion:
         for nombre in self.no_encontrados:
             lineas.append(f"- No encontré '{nombre}' en el catálogo.")
 
+        for nombre in self.ambiguos:
+            lineas.append(f"- '{nombre}' puede referirse a varios productos; pedí una aclaración.")
+
+        for nombre in self.invalidos:
+            lineas.append(f"- Falta un producto o una cantidad válida en '{nombre}'.")
+
         if self.items:
             lineas.append(f"Total: {formato_dinero(self.total)}")
+            if any(item.precio_provisorio for item in self.items):
+                lineas.append("ATENCIÓN: hay precios de demostración sin confirmar con el local.")
+
+        if not self.completa:
+            lineas.append("Esta cotización está incompleta; no confirmes un pedido todavía.")
 
         return "\n".join(lineas)
 
@@ -105,15 +124,17 @@ def buscar_producto(
         if not producto.get("activo", True):
             continue
 
-        candidatos = [producto["nombre"], *producto.get("alias", [])]
-        puntaje = max(
-            _parecido(consulta_norm, normalizar(c)) for c in candidatos
-        )
+        puntaje = _puntaje_producto(consulta_norm, producto)
         if puntaje >= UMBRAL_DE_PARECIDO:
             puntuados.append((puntaje, producto))
 
     puntuados.sort(key=lambda par: par[0], reverse=True)
     return [producto for _, producto in puntuados[:maximo]]
+
+
+def _puntaje_producto(consulta_norm: str, producto: dict) -> float:
+    candidatos = [producto["nombre"], *(producto.get("alias") or [])]
+    return max(_parecido(consulta_norm, normalizar(c)) for c in candidatos)
 
 
 def _parecido(a: str, b: str) -> float:
@@ -126,6 +147,8 @@ def _parecido(a: str, b: str) -> float:
     """
     if not a or not b:
         return 0.0
+    if a == b:
+        return 2.0
     if a in b or b in a:
         return 1.0
     return SequenceMatcher(None, a, b).ratio()
@@ -145,16 +168,28 @@ def cotizar(productos: list[dict], items: list[dict]) -> Cotizacion:
     resultado = Cotizacion()
 
     for pedido in items:
-        nombre_pedido = (pedido.get("producto") or "").strip()
-        cantidad = float(pedido.get("cantidad") or 0)
+        nombre_pedido = str(pedido.get("producto") or "").strip()
+        try:
+            cantidad = float(pedido.get("cantidad") or 0)
+        except (TypeError, ValueError):
+            cantidad = 0
 
-        if not nombre_pedido or cantidad <= 0:
+        if not nombre_pedido or not math.isfinite(cantidad) or cantidad <= 0:
+            resultado.invalidos.append(nombre_pedido or "producto sin nombre")
             continue
 
-        encontrados = buscar_producto(productos, nombre_pedido, maximo=1)
+        encontrados = buscar_producto(productos, nombre_pedido, maximo=2)
         if not encontrados:
             resultado.no_encontrados.append(nombre_pedido)
             continue
+
+        if len(encontrados) > 1:
+            consulta_norm = normalizar(nombre_pedido)
+            primero = _puntaje_producto(consulta_norm, encontrados[0])
+            segundo = _puntaje_producto(consulta_norm, encontrados[1])
+            if primero == segundo:
+                resultado.ambiguos.append(nombre_pedido)
+                continue
 
         producto = encontrados[0]
         item = _cotizar_item(producto, cantidad)
@@ -175,10 +210,10 @@ def _cotizar_item(producto: dict, cantidad: float) -> ItemCotizado:
         cantidad_a_cobrar = minima
         aviso = f"cantidad mínima {minima:g} {producto['unidad']}"
 
-    minutos = round(
+    minutos = max(1, math.ceil(
         float(producto.get("minutos_preparacion") or 0)
         + float(producto.get("minutos_por_unidad") or 0) * cantidad_a_cobrar
-    )
+    ))
 
     return ItemCotizado(
         producto_id=producto["id"],
@@ -189,6 +224,7 @@ def _cotizar_item(producto: dict, cantidad: float) -> ItemCotizado:
         subtotal=round(precio * cantidad_a_cobrar, 2),
         minutos=minutos,
         aviso=aviso,
+        precio_provisorio=bool(producto.get("precio_provisorio", False)),
     )
 
 

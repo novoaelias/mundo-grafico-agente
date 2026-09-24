@@ -60,7 +60,7 @@ def cerrar_pool() -> None:
         _pool = None
 
 
-def aplicar_migraciones(dsn: str) -> list[str]:
+def aplicar_migraciones(dsn: str, incluir_demo: bool = False) -> list[str]:
     """Corre los `.sql` de `migraciones/` que todavía no se aplicaron.
 
     Devuelve los nombres de los archivos que se aplicaron recién ahora
@@ -89,6 +89,8 @@ def aplicar_migraciones(dsn: str) -> list[str]:
         }
 
         for archivo in sorted(CARPETA_MIGRACIONES.glob("*.sql")):
+            if archivo.name == "003_demo.sql" and not incluir_demo:
+                continue
             if archivo.name in ya_aplicadas:
                 continue
 

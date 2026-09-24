@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from langchain_core.tools import tool
 
 from .. import base_datos
 from .. import catalogo as motor
 from .. import pedidos as datos
+
+registro = logging.getLogger("mundografico.herramientas.productos")
 
 
 @tool
@@ -22,15 +26,19 @@ def buscar_producto(consulta: str) -> str:
         consulta: lo que la persona pidió, en sus palabras. Por ejemplo
             "banners", "tarjetas de presentación", "algo para pegar en la pared".
     """
-    with base_datos.obtener_pool().connection() as conexion:
-        productos = datos.productos_activos(conexion)
-
-    encontrados = motor.buscar_producto(productos, consulta)
+    try:
+        with base_datos.obtener_pool().connection() as conexion:
+            productos = datos.productos_activos(conexion)
+        encontrados = motor.buscar_producto(productos, consulta)
+    except Exception:
+        registro.exception("Falló buscar_producto")
+        return "No pude consultar el catálogo ahora. Derivá la consulta al equipo."
     if not encontrados:
         return f"No encontré nada parecido a '{consulta}' en el catálogo."
 
     lineas = [
         f"- {p['nombre']} ({motor.formato_dinero(float(p['precio_unitario']))} por {p['unidad']})"
+        + (" — precio de demostración" if p.get("precio_provisorio") else "")
         for p in encontrados
     ]
     return "Encontré esto en el catálogo:\n" + "\n".join(lineas)
@@ -56,8 +64,11 @@ def cotizar(items: list[dict]) -> str:
             unidades sueltas (no "cientos": si piden 200 tarjetas, cantidad
             es 200), para el resto son unidades sueltas.
     """
-    with base_datos.obtener_pool().connection() as conexion:
-        productos = datos.productos_activos(conexion)
-
-    resultado = motor.cotizar(productos, items)
+    try:
+        with base_datos.obtener_pool().connection() as conexion:
+            productos = datos.productos_activos(conexion)
+        resultado = motor.cotizar(productos, items)
+    except Exception:
+        registro.exception("Falló cotizar")
+        return "No pude calcular un precio confiable ahora. Derivá la consulta al equipo."
     return resultado.texto()

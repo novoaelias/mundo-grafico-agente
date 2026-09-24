@@ -67,11 +67,13 @@ class ClienteChatwoot:
         }
 
     def etiquetas(self, conversacion_id: str) -> list[str]:
-        try:
-            respuesta = self._api("GET", f"conversations/{conversacion_id}/labels")
-        except Exception:
-            return []
-        return respuesta.get("payload") or []
+        # El POST reemplaza TODA la lista. Si el GET falla, devolver []
+        # borraría etiquetas del equipo al agregar una nueva.
+        respuesta = self._api("GET", f"conversations/{conversacion_id}/labels")
+        etiquetas = respuesta.get("payload")
+        if not isinstance(etiquetas, list):
+            raise ErrorDeChatwoot("Chatwoot no devolvió la lista de etiquetas.")
+        return etiquetas
 
     # -- Lo que se hace ------------------------------------------------------------
 
@@ -91,6 +93,17 @@ class ClienteChatwoot:
             "POST",
             f"conversations/{conversacion_id}/labels",
             {"labels": [*actuales, etiqueta]},
+        )
+
+    def quitar_etiqueta(self, conversacion_id: str, etiqueta: str) -> None:
+        """Devuelve el control al bot sin borrar las demás etiquetas."""
+        actuales = self.etiquetas(conversacion_id)
+        if etiqueta not in actuales:
+            return
+        self._api(
+            "POST",
+            f"conversations/{conversacion_id}/labels",
+            {"labels": [actual for actual in actuales if actual != etiqueta]},
         )
 
     def nota_privada(self, conversacion_id: str, texto: str) -> None:

@@ -100,6 +100,28 @@ def test_agregar_etiqueta_que_ya_estaba_no_hace_nada():
     assert posts == []
 
 
+def test_si_falla_leer_etiquetas_no_reemplaza_la_lista():
+    class ClienteQueExplota(ClienteFalso):
+        def _api(self, metodo, camino, datos=None):
+            if metodo == "GET":
+                raise ConnectionError("caído")
+            return super()._api(metodo, camino, datos)
+
+    cliente = ClienteQueExplota()
+    with pytest.raises(ConnectionError):
+        cliente.agregar_etiqueta("12", "humano")
+    assert not any(llamada["metodo"] == "POST" for llamada in cliente.llamadas)
+
+
+def test_quitar_etiqueta_humano_conserva_las_demas():
+    cliente = ClienteFalso({
+        "GET conversations/12/labels": {"payload": ["ventas", "humano", "urgente"]}
+    })
+    cliente.quitar_etiqueta("12", "humano")
+    posts = [l for l in cliente.llamadas if l["metodo"] == "POST"]
+    assert posts[0]["datos"] == {"labels": ["ventas", "urgente"]}
+
+
 # -- mensajes -----------------------------------------------------------------
 
 

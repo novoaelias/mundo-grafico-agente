@@ -49,10 +49,10 @@ seguro de usar con un LLM.
 
 ## Mapa del repo
 
-Todo lo que agregamos vive en archivos nuevos, no se toca el kit — con
-**una sola excepción**: `src/agente/herramientas.py`, que ahora importa
-`HERRAMIENTAS` desde `mundografico` en vez de definir la del clima. Es
-intencional: mantiene el diff contra `upstream` chiquito y estable.
+La capa propia vive en `src/mundografico`. Hay dos cambios deliberados en
+el kit: `src/agente/herramientas.py` registra las herramientas de la
+imprenta y `src/agente/prompts.py` incorpora `prompts/ejemplos.md` si tiene
+contenido. Ambos cambios se releen al comparar con `upstream`.
 
 ```
 src/mundografico/
@@ -62,6 +62,8 @@ src/mundografico/
 ├── catalogo.py            Búsqueda de productos y cotización — lógica pura
 ├── agenda.py              Cuándo puede estar listo un trabajo — lógica pura
 ├── horario.py             La hora de Laferrere (America/Argentina/Buenos_Aires)
+├── demo.py                Reposiciona los pedidos ficticios en días hábiles actuales
+├── canal.py               Pide texto si llega un audio/foto/archivo
 ├── pedidos.py             Capa con Postgres: une catalogo.py + agenda.py
 ├── chatwoot_api.py        Cliente propio de la API de Chatwoot (contacto, etiquetas, notas)
 ├── sheets.py              Registro de ventas en Google Sheets
@@ -70,6 +72,10 @@ src/mundografico/
 
 servidor_mundografico.py  El entrypoint real (lo que corre el Dockerfile)
 prompts/sistema.md        Identidad, circuito de venta, reglas duras
+prompts/ejemplos.md       Vacío hasta transcribir los chats reales
+preparar_demo.py          Recoloca pedidos ficticios antes de cada presentación
+insumos/precios_pdf_para_validar.csv  Precios transcritos del PDF, aún sin unidad confirmada
+AUDITORIA-PLAN.md         Cumplimiento punto por punto y bloqueos externos
 GUION-DEMO.md              Guion de la demo para el cliente
 ```
 
@@ -81,16 +87,24 @@ python -m venv .venv
 pip install -r requirements-mundografico.txt
 
 copy .env.example .env
-# completá al menos: ANTHROPIC_API_KEY, POSTGRES_DSN, PANEL_CLAVE
+# completá al menos: ANTHROPIC_API_KEY, POSTGRES_DSN, PANEL_CLAVE,
+# CHATWOOT_URL, CHATWOOT_TOKEN y CHATWOOT_WEBHOOK_TOKEN
 ```
 
-Necesitás una Postgres a mano (local, Docker, o un túnel SSH al del VPS —
-ver más abajo). `servidor_mundografico.py` aplica las migraciones solo al
-arrancar, no hace falta correr nada a mano:
+Necesitás Postgres y Chatwoot accesibles. `servidor_mundografico.py`
+aplica el esquema y el catálogo inicial al arrancar. Los pedidos ficticios
+solo se cargan con `MG_MODO_DEMO=true`:
 
 ```bash
 python servidor_mundografico.py
 ```
+
+Antes de cada presentación, con `MG_MODO_DEMO=true`, ejecutá
+`python preparar_demo.py`. Reposiciona solo los pedidos `DEMO-*` en los
+próximos tres días hábiles; si la app reinicia en modo demo también los
+actualiza. Para atender clientes reales, fijá `MG_MODO_DEMO=false` y usá
+solo precios confirmados. Nunca dejes los pedidos ficticios en la base
+operativa: eliminá `DEMO-*` al pasar a producción.
 
 Vas a ver en la consola qué migraciones se aplicaron. Con eso arriba:
 
@@ -121,10 +135,11 @@ entre días) y por eso necesita Postgres. Está apagado por defecto:
 MUNDOGRAFICO_TEST_DSN=postgresql://usuario:clave@localhost:5432/mundografico_dev pytest tests/test_mundografico_pedidos_integracion.py
 ```
 
-Si el Postgres real está en el VPS, un túnel alcanza:
+Si el Postgres real está en el VPS, primero confirmá en Coolify la dirección
+y el puerto alcanzables desde el host. Solo entonces abrí un túnel:
 
 ```bash
-ssh -L 5433:localhost:5432 usuario@tu-vps
+ssh -L 5433:HOST_INTERNO_POSTGRES:PUERTO_POSTGRES usuario@tu-vps
 # y en el DSN de arriba: localhost:5433
 ```
 
@@ -152,24 +167,37 @@ ssh -L 5433:localhost:5432 usuario@tu-vps
   (tarjetas sueltas, m², hojas), nunca "cientos" ni otro múltiplo:
   `precio_unitario` y los umbrales de `escalas` ya lo tienen incorporado.
   Ver el comentario al principio de `migraciones/002_catalogo.sql`.
-- **`POLITICA_PAGO` decide con qué `estado_pago` nace un pedido**
-  (`retiro` → a cobrar, `sena_50` → señado, `adelantado_100` → pagado),
-  pero no hay una pasarela de pago real detrás todavía: es una foto de lo
-  que se acordó en la charla. Cambiarla en el `.env` requiere también
-  actualizar la sección 4 de `prompts/sistema.md` a mano — el prompt es
-  texto plano, no lee variables de entorno.
+- **Pago**: con `POLITICA_PAGO=retiro` el bot crea pedidos `a_cobrar`.
+  Con `sena_50` o `adelantado_100` deriva el cierre a una persona:
+  hasta integrar una verificación de pago no marca señas ni pagos como
+  recibidos. Si cambiás la política, actualizá también la sección 4 de
+  `prompts/sistema.md`.
 - **Las escalas de precio por cantidad no se editan desde el panel
   todavía** (se ven, no se tocan) — armar esa UI es una pantalla en sí
   misma. Se editan por ahora con una migración o a mano en la base.
-- **El panel no muestra qué conversaciones están en pausa** (con la
-  etiqueta `humano`): eso ya lo resuelve la bandeja del propio Chatwoot,
-  filtrando por esa etiqueta — no se duplicó la función acá.
+- **Pausa del bot**: el panel consulta las etiquetas de Chatwoot al mostrar
+  cada pedido. Si ve `humano`, muestra “Bot en pausa” y ofrece “Reanudar”;
+  al hacerlo conserva las demás etiquetas. Si Chatwoot no contesta, muestra
+  “Estado no disponible”, sin asumir que el bot está activo. Un operador
+  debe aplicar la etiqueta `humano` en Chatwoot; contestar desde la bandeja
+  por sí solo no activa la pausa.
+- **Confirmación de precios**: el catálogo no convierte un precio de
+  ejemplo en real por guardar tiempos u otros campos. Hay que marcar
+  “Confirmé este precio” explícitamente en la fila.
+- **Aviso de pedido listo**: `avisado_listo_en` se guarda únicamente
+  después de un envío exitoso a Chatwoot. Si falla, el panel muestra
+  “Aviso pendiente” y permite reintentar. Ante una respuesta perdida
+  después de que Chatwoot haya aceptado el mensaje, un reintento manual
+  podría duplicarlo; revisá la conversación antes de pulsarlo.
 
 ## Lo que falta para producción (no para la demo)
 
-- Cargar el catálogo real (hoy son precios de ejemplo,
-  `precio_provisorio = true`) y las capturas de chat para afinar
-  `prompts/sistema.md`.
+- Confirmar la unidad de facturación y si son precios finales en el PDF
+  de lonas/vinilos. Hay 32 variantes transcritas (29 con importe y 3 sin
+  importe) en `insumos/precios_pdf_para_validar.csv`; todavía no se cargaron como
+  precios confirmados. Los demás productos siguen como ejemplo.
+- Cargar las capturas de chat y transcribir sus ejemplos de venta en
+  `prompts/ejemplos.md`. El agente los toma sin reiniciar.
 - WhatsApp oficial (Cloud API de Meta): el aviso de "pedido listo" casi
   siempre cae fuera de la ventana gratuita de 24hs y necesita una
   plantilla de utilidad aprobada por Meta — pedirla con tiempo.
