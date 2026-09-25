@@ -37,6 +37,7 @@ preparar()  # antes de imprimir nada, para que las tildes no rompan Windows
 
 import uvicorn  # noqa: E402
 from fastapi import FastAPI  # noqa: E402
+from fastapi.responses import RedirectResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from agente import ErrorDeConfiguracion  # noqa: E402
@@ -90,6 +91,12 @@ def construir_app(config_agente: ConfigAgente, config_mg: ConfigNegocio) -> Fast
         etiqueta_humano=config_agente.chatwoot_etiqueta_humano,
     )
     app = crear_app(config_agente, canal=canal)
+
+    @app.get("/panel", include_in_schema=False)
+    async def abrir_panel() -> RedirectResponse:
+        # FastAPI redirige automáticamente /panel a /panel/ usando el esquema
+        # interno HTTP del proxy; una ruta explícita conserva HTTPS en el navegador.
+        return RedirectResponse(url="/panel/pedidos")
 
     app.mount(
         "/panel/estaticos",
