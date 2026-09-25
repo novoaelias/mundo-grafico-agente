@@ -89,6 +89,7 @@ def construir_app(config_agente: ConfigAgente, config_mg: ConfigNegocio) -> Fast
         token=config_agente.chatwoot_token,
         cuenta_id=config_agente.chatwoot_cuenta_id,
         etiqueta_humano=config_agente.chatwoot_etiqueta_humano,
+        modo_demo=config_mg.negocio.modo_demo,
     )
     app = crear_app(config_agente, canal=canal)
 

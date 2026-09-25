@@ -47,3 +47,25 @@ def test_si_faltan_etiquetas_y_chatwoot_no_contesta_el_bot_se_calla():
     canal._api = lambda *args, **kwargs: (_ for _ in ()).throw(ConnectionError("caído"))
     mensaje = canal.traducir(evento)
     assert canal.deberia_responder(mensaje) is False
+
+
+def test_demo_aclara_precio_aunque_el_modelo_lo_omita():
+    canal = ChatwootMundoGrafico("https://chatwoot.example", "token", 1, modo_demo=True)
+    enviados = []
+    canal._api = lambda metodo, camino, datos=None: enviados.append(datos["content"])
+
+    canal.enviar("7", ["500 volantes salen $7.500.", "¿Te va bien?"])
+
+    assert "demo" in enviados[0].lower()
+    assert enviados[1:] == ["500 volantes salen $7.500.", "¿Te va bien?"]
+
+
+def test_demo_no_repite_aclaracion_ni_interviene_sin_precio():
+    canal = ChatwootMundoGrafico("https://chatwoot.example", "token", 1, modo_demo=True)
+    enviados = []
+    canal._api = lambda metodo, camino, datos=None: enviados.append(datos["content"])
+
+    canal.enviar("7", ["Precio de demostración: $7.500."])
+    canal.enviar("7", ["¿Necesitás algo más?"])
+
+    assert enviados == ["Precio de demostración: $7.500.", "¿Necesitás algo más?"]

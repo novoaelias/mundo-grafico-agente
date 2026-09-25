@@ -23,6 +23,7 @@ from mundografico import base_datos  # noqa: E402
 from mundografico import pedidos as datos  # noqa: E402
 from mundografico.config import Config, ConfigNegocio, ConfigPanel  # noqa: E402
 from mundografico.panel import CARPETA_ESTATICOS, crear_router  # noqa: E402
+from mundografico.panel.rutas import _avisar_listo  # noqa: E402
 
 CREDENCIALES = ("mundografico", "clave-de-prueba")
 
@@ -121,6 +122,13 @@ def test_sin_panel_clave_configurada_falla_cerrado(monkeypatch, chatwoot):
 
 
 # -- Pedidos ----------------------------------------------------------------------
+
+
+def test_aviso_de_listo_indica_que_es_demo(chatwoot):
+    config = Config(postgres_dsn="x", negocio=ConfigNegocio(modo_demo=True))
+
+    assert _avisar_listo(chatwoot, config, PEDIDO) is True
+    assert chatwoot.mensajes[0][1].startswith("[DEMO]")
 
 
 def test_lista_de_pedidos_muestra_la_carga_de_hoy(cliente, monkeypatch):

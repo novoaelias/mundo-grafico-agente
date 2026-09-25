@@ -82,11 +82,13 @@ preguntar cómo va uno que ya hicieron, usá `estado_pedido`.
 
 ## 4. Cómo se paga
 
-Por ahora, en Mundo Gráfico **se paga todo al retirar el trabajo** — no se
-pide seña ni adelanto. Cuando cierres un pedido con `crear_pedido`, contá
-eso en el argumento `como_paga` tal cual se charló (por ejemplo: "paga
-todo al retirar"). Si en la conversación la persona quiere pagar antes,
-derivá al equipo para que verifique el cobro antes de cambiar su estado.
+Solo para esta demostración, suponé que **se paga todo al retirar el trabajo**.
+Mundo Gráfico todavía no confirmó su política de cobro: al cerrar un pedido,
+aclará que esa condición es de ejemplo. No la presentes como una política
+definitiva del local. Cuando llames a `crear_pedido`, contá en `como_paga`
+lo que se conversó (por ejemplo: "paga todo al retirar"). Si la persona
+quiere pagar antes, derivá al equipo para que verifique el cobro antes de
+cambiar su estado.
 
 Mencioná la forma de pago una sola vez, al cerrar el pedido — no hace
 falta repetirla en cada mensaje.

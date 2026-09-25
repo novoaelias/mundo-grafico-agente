@@ -6,12 +6,15 @@ proyecto, no en la explicación técnica.
 
 ## Antes de arrancar (una sola vez)
 
-- [ ] El servidor está levantado y `/salud` contesta.
-- [ ] El inbox de Telegram está conectado en Chatwoot y el webhook apunta
-      bien (mandate un mensaje de prueba vos mismo).
-- [ ] Entraste al panel (`/panel/pedidos`) y ves los pedidos de demo.
-- [ ] Configuraste `MG_MODO_DEMO=true` y ejecutaste `python preparar_demo.py`
-      hoy. El pedido `DEMO-002` debe ocupar los 300 minutos del primer día hábil.
+- [x] El servidor está levantado y `/salud` contesta por HTTPS.
+- [x] El inbox de Telegram está conectado en Chatwoot y el webhook apunta
+      al agente. El recorrido interno Chatwoot → agente → Chatwoot ya se probó.
+- [ ] Mandate un mensaje desde tu propio Telegram para verificar también
+      la entrega al celular antes de mostrárselo al cliente.
+- [x] El panel (`/panel/pedidos`) muestra los pedidos de demo.
+- [ ] Antes de la presentación, con `MG_MODO_DEMO=true`, ejecutá
+      `python preparar_demo.py` desde la terminal de la aplicación en Coolify
+      (o reiniciá la aplicación). `DEMO-002` debe ocupar el primer día hábil.
 - [ ] Tenés a mano el usuario y clave del panel para no estar buscándolo
       delante del cliente.
 - [ ] Ojeaste `prompts/sistema.md`: si ya tenés datos reales del local
@@ -19,8 +22,9 @@ proyecto, no en la explicación técnica.
 - [ ] Los precios del PDF tienen unidad y condición comercial confirmadas.
       Si todavía no, usá los precios de demostración y decí claramente que
       el dueño debe validarlos antes de atender clientes reales.
-- [ ] Sheets está conectado y la cuenta de servicio tiene permiso de editor;
-      si no, el paso 7 del guion aún no se puede mostrar en vivo.
+- [ ] Sheets está conectado y la cuenta de servicio tiene permiso de editor.
+      Todavía falta esta conexión; hasta entonces, omití el paso 7 y mostrá
+      el estado «pagado» en el panel.
 
 ## Los siete pasos
 
@@ -57,10 +61,12 @@ Apretás el botón delante suyo y a los segundos le suena el celular con
 el aviso de que puede pasar a retirar. Ese es el otro dolor de cabeza que
 se resuelve solo: hoy ese aviso lo manda él a mano, si se acuerda.
 
-**7. Abrí la hoja de Google.**
-La venta ya está ahí, con cliente, total y estado. Es el control de plata
-que pidió — mostrarlo cierra el combo completo: vende, organiza y deja
-constancia.
+**7. Abrí la hoja de Google (cuando esté conectada).**
+La venta debe aparecer con cliente, total y estado. Este paso aún no se
+puede mostrar en vivo: falta la hoja y la cuenta de servicio de Google.
+Mientras tanto, marcá «Entregado», registrá el monto cobrado y mostrá el
+estado «pagado» del pedido en el panel. Los cambios quedan en Postgres y
+se sincronizarán con Sheets al conectarlo.
 
 ## Un par de pruebas extra si da el tiempo
 
@@ -77,10 +83,9 @@ constancia.
 
 ## Después de la demo
 
-Ahí es cuando se habla de precio. Lo que acaba de ver son tres
-automatizaciones funcionando juntas (ventas, agenda del taller, control
-de plata) sobre una base que ya está armada — lo que falta para
-producción es cargar los datos reales (precios, tiempos de producción,
-las capturas de chats para afinar el tono de venta) y migrar de Telegram
-a WhatsApp de verdad, que es un cambio de configuración en Chatwoot, no
-de código.
+Ahí es cuando se habla de precio. Lo que acaba de ver es la venta, la agenda
+del taller y el aviso de retiro funcionando juntos. El registro interno de
+cobros ya existe; Sheets requiere conectarlo para mostrarlo en vivo. Para
+producción faltan los datos reales (precios, tiempos de producción,
+dirección y horarios, política de pago y capturas de chats) y conectar
+WhatsApp en Chatwoot.

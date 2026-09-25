@@ -45,7 +45,7 @@ RUN pip install --no-cache-dir -r requirements-mundografico.txt
 
 COPY src/ ./src/
 COPY prompts/ ./prompts/
-COPY webhook_chatwoot.py bot_telegram.py servidor_mundografico.py ./
+COPY webhook_chatwoot.py bot_telegram.py servidor_mundografico.py preparar_demo.py ./
 
 # Sin esto corre como root sin necesidad: el servidor no escribe nada en
 # disco (la memoria va a Postgres).

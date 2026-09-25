@@ -21,7 +21,7 @@
       <button class="boton boton-listo"
               hx-post="/panel/pedidos/{{ pedido.id }}/listo"
               hx-target="#pedido-{{ pedido.id }}" hx-swap="outerHTML"
-              hx-confirm="¿Marcar {{ pedido.numero }} como listo? Se le avisa al cliente por WhatsApp.">
+              hx-confirm="¿Marcar {{ pedido.numero }} como listo? Se le avisa al cliente por su canal de contacto.">
         ✓ Listo
       </button>
       <button class="boton boton-cancelar"

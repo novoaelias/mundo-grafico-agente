@@ -2,11 +2,32 @@
 
 from __future__ import annotations
 
+import re
+
 from agente.canales.base import MensajeEntrante
 from agente.canales.chatwoot import Chatwoot
 
 
 class ChatwootMundoGrafico(Chatwoot):
+    def __init__(self, *args, modo_demo: bool = False, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.modo_demo = modo_demo
+
+    def enviar(self, conversacion: str, mensajes: list[str]) -> None:
+        # El modelo recibió la advertencia del precio provisorio en la
+        # herramienta, pero en una prueba real la omitió al responder. La
+        # aclaración sale desde el canal para que no dependa del modelo.
+        texto = " ".join(mensajes)
+        hay_precio_o_pedido = re.search(r"\$\s*[\d.,]+|MG-\d+", texto)
+        ya_aclarado = re.search(r"demo|demostraci|provisori|de ejemplo", texto, re.I)
+        if self.modo_demo and hay_precio_o_pedido and not ya_aclarado:
+            mensajes = [
+                "⚠️ Esta es una demo: el precio y la forma de pago todavía "
+                "no están confirmados por Mundo Gráfico.",
+                *mensajes,
+            ]
+        super().enviar(conversacion, mensajes)
+
     def _etiquetas_de(self, id_conversacion) -> list[str]:
         """Si faltan etiquetas en el webhook y falla la consulta, el bot espera.
 

@@ -9,6 +9,20 @@ Para las convenciones del kit en sí (por qué el código está en castellano,
 por qué el grafo de LangGraph es así, cómo se prueba) la referencia sigue
 siendo [`AGENTS.md`](AGENTS.md) — no lo duplicamos acá.
 
+## Estado de la demo en el VPS (25/09/2026)
+
+La aplicación ya corre en Coolify con HTTPS y Postgres. Chatwoot tiene una
+bandeja Telegram y otra de simulación interna; el webhook del agente está
+activo. Se probó en la bandeja interna el recorrido de cotización, agenda,
+pedido, aviso de retiro, entrega/cobro y pausa humana. Las credenciales y
+las URLs de acceso están en el archivo local protegido
+`<archivo local fuera del repo>`, fuera de Git.
+
+Los precios del catálogo y la política de pago son de ejemplo. La salida del
+bot advierte esto de forma obligatoria en la demo. Google Sheets todavía no
+está conectado. Ver el estado preciso y los pendientes en
+[`AUDITORIA-PLAN.md`](AUDITORIA-PLAN.md).
+
 ## Qué es esto, en una imagen
 
 ```

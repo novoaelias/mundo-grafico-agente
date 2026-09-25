@@ -319,6 +319,8 @@ def _avisar_listo(chatwoot: ClienteChatwoot, config: Config, pedido: dict) -> bo
         f"{config.negocio.direccion}. Si necesitás la dirección exacta "
         f"o el horario, te lo confirmamos por acá."
     )
+    if config.negocio.modo_demo:
+        texto = "[DEMO] " + texto
     try:
         chatwoot.enviar_mensaje(pedido["conversacion_id"], texto)
     except Exception as e:

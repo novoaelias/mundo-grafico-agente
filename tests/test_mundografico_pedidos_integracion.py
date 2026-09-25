@@ -341,6 +341,12 @@ def test_actualizar_producto_con_escalas_de_verdad_no_revienta(conexion):
 
 def test_actualizar_precio_sin_confirmar_mantiene_provisorio(conexion):
     id_sello = id_de_producto(conexion, "Sello automático")
+    # La fixture confirma todo el catálogo para probar pedidos reales;
+    # este caso necesita partir de un precio de ejemplo explícito.
+    conexion.execute(
+        "UPDATE mundografico.productos SET precio_provisorio = TRUE WHERE id = %s",
+        (id_sello,),
+    )
 
     actualizado = pedidos.actualizar_producto(conexion, id_sello, {"precio_unitario": 7000})
     conexion.commit()
