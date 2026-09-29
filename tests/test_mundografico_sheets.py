@@ -114,6 +114,38 @@ def test_un_error_de_la_api_no_revienta_y_devuelve_false(monkeypatch):
     assert sheets.sincronizar_pedido(CONFIG_ACTIVA, PEDIDO) is False
 
 
+def test_pestana_vacia_recibe_encabezados():
+    class HojaVacia:
+        def __init__(self):
+            self.escrituras = []
+
+        def row_values(self, fila):
+            assert fila == 1
+            return []
+
+        def update(self, valores, range_name):
+            self.escrituras.append((valores, range_name))
+
+    hoja = HojaVacia()
+    sheets._asegurar_encabezados(hoja)
+
+    assert hoja.escrituras == [([sheets.ENCABEZADOS], "A1:K1")]
+
+
+def test_pestana_con_columnas_distintas_no_se_pisa():
+    class HojaAjena:
+        def row_values(self, fila):
+            return ["Cliente", "Importe"]
+
+        def update(self, *args, **kwargs):
+            raise AssertionError("No se debe modificar una hoja ajena")
+
+    import pytest
+
+    with pytest.raises(ValueError, match="encabezados incompatibles"):
+        sheets._asegurar_encabezados(HojaAjena())
+
+
 def test_columna_entregado_solo_si_esta_entregado(monkeypatch):
     hoja = HojaFalsa()
     monkeypatch.setattr(sheets, "_abrir_hoja", lambda config: hoja)

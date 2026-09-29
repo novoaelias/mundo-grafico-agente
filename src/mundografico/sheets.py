@@ -124,10 +124,21 @@ def _abrir_hoja(config: ConfigSheets):
         hoja = libro.worksheet(config.nombre_pestaña)
     except gspread.WorksheetNotFound:
         hoja = libro.add_worksheet(title=config.nombre_pestaña, rows=1000, cols=len(ENCABEZADOS))
-        hoja.append_row(ENCABEZADOS)
+
+    _asegurar_encabezados(hoja)
 
     _hoja_cacheada = hoja
     return _hoja_cacheada
+
+
+def _asegurar_encabezados(hoja) -> None:
+    primera_fila = hoja.row_values(1)
+    if not primera_fila:
+        hoja.update([ENCABEZADOS], range_name=f"A1:{_ultima_columna()}1")
+    elif primera_fila[:len(ENCABEZADOS)] != ENCABEZADOS:
+        # No escribir ventas sobre una pestaña con columnas distintas:
+        # los importes y estados podrían terminar en campos equivocados.
+        raise ValueError("La pestaña de ventas tiene encabezados incompatibles")
 
 
 def _fila_de(pedido: dict) -> list:
