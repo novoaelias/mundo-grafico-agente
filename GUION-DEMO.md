@@ -22,9 +22,9 @@ proyecto, no en la explicación técnica.
 - [ ] Los precios del PDF tienen unidad y condición comercial confirmadas.
       Si todavía no, usá los precios de demostración y decí claramente que
       el dueño debe validarlos antes de atender clientes reales.
-- [ ] Sheets está conectado y la cuenta de servicio tiene permiso de editor.
-      Todavía falta esta conexión; hasta entonces, omití el paso 7 y mostrá
-      el estado «pagado» en el panel.
+- [x] Sheets está conectado a la hoja «Mundo Gráfico — DEMO» y la cuenta de
+      servicio tiene permiso de editor. `MG-0001` y `MG-0002` ya se verificaron
+      sin filas duplicadas.
 
 ## Los siete pasos
 
@@ -61,12 +61,12 @@ Apretás el botón delante suyo y a los segundos le suena el celular con
 el aviso de que puede pasar a retirar. Ese es el otro dolor de cabeza que
 se resuelve solo: hoy ese aviso lo manda él a mano, si se acuerda.
 
-**7. Abrí la hoja de Google (cuando esté conectada).**
-La venta debe aparecer con cliente, total y estado. Este paso aún no se
-puede mostrar en vivo: falta la hoja y la cuenta de servicio de Google.
-Mientras tanto, marcá «Entregado», registrá el monto cobrado y mostrá el
-estado «pagado» del pedido en el panel. Los cambios quedan en Postgres y
-se sincronizarán con Sheets al conectarlo.
+**7. Abrí la hoja de Google.**
+En la pestaña `Ventas` de «Mundo Gráfico — DEMO», buscá el número del pedido:
+debe haber una sola fila con cliente, total y estado. Marcá «Entregado» en el
+panel, registrá el monto cobrado y volvé a la hoja: esa misma fila debe decir
+`entregado` y `pagado`, con el importe en «Monto cobrado». Esta hoja contiene
+ventas ficticias; creá una hoja separada antes de registrar ventas reales.
 
 ## Un par de pruebas extra si da el tiempo
 
@@ -84,8 +84,7 @@ se sincronizarán con Sheets al conectarlo.
 ## Después de la demo
 
 Ahí es cuando se habla de precio. Lo que acaba de ver es la venta, la agenda
-del taller y el aviso de retiro funcionando juntos. El registro interno de
-cobros ya existe; Sheets requiere conectarlo para mostrarlo en vivo. Para
-producción faltan los datos reales (precios, tiempos de producción,
-dirección y horarios, política de pago y capturas de chats) y conectar
-WhatsApp en Chatwoot.
+del taller, el aviso de retiro y el registro en Sheets funcionando juntos.
+Para producción faltan los datos reales (precios, tiempos de producción,
+dirección y horarios, política de pago y capturas de chats), una hoja separada
+para ventas reales y conectar WhatsApp en Chatwoot.
