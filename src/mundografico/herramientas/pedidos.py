@@ -4,6 +4,7 @@ alta de verdad, y consultarlo después."""
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
@@ -54,14 +55,24 @@ def calcular_entrega(items: list[dict]) -> str:
 
     motivo = agenda.motivo_por_el_que_no_entra_hoy(taller, comprometido, hoy, ahora)
     aclaracion = f" ({motivo})" if motivo else ""
+    # El motivo anterior habla SOLO de hoy. Si mañana ya está completo,
+    # explicitarlo evita que el agente atribuya a mañana el corte de hoy.
+    manana = hoy + timedelta(days=1)
+    contexto_manana = ""
+    if manana < resultado.fecha_promesa:
+        fecha_manana = horario.formatear_fecha(manana)
+        if manana.isoweekday() not in taller["dias_habiles"] or manana in (taller.get("feriados") or []):
+            contexto_manana = f" El {fecha_manana} no es día hábil."
+        elif comprometido.get(manana, 0) >= taller["minutos_por_dia"]:
+            contexto_manana = f" El {fecha_manana} el taller ya está completo."
 
     if resultado.se_reparte_en_varios_dias:
         return (
             f"Es un trabajo grande y no entra en un solo día de producción: "
-            f"va a estar listo el {fecha_texto}{aclaracion}."
+            f"va a estar listo el {fecha_texto}{aclaracion}.{contexto_manana}"
         )
 
-    return f"No llega para hoy{aclaracion}. Va a estar listo el {fecha_texto}."
+    return f"No llega para hoy{aclaracion}.{contexto_manana} Va a estar listo el {fecha_texto}."
 
 
 @tool

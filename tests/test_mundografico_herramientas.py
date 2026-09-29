@@ -157,6 +157,17 @@ def test_calcular_entrega_da_el_motivo_cuando_no_llega_hoy(monkeypatch):
     assert "lugar" in texto
 
 
+def test_calcular_entrega_distingue_corte_de_hoy_y_carga_de_manana(monkeypatch):
+    preparar_agenda(monkeypatch, comprometido={date(2026, 9, 22): 300})
+    monkeypatch.setattr(horario, "hora_actual", lambda: time(21, 0))
+
+    texto = calcular_entrega.invoke({"items": [{"producto": "sello", "cantidad": 1}]})
+
+    assert "horario límite para comprometer entregas de hoy" in texto
+    assert "martes 22/09 el taller ya está completo" in texto
+    assert "miércoles 23/09" in texto
+
+
 def test_calcular_entrega_producto_no_encontrado(monkeypatch):
     preparar_agenda(monkeypatch)
 

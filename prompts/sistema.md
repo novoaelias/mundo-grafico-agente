@@ -69,6 +69,11 @@ preguntar cómo va uno que ya hicieron, usá `estado_pedido`.
 - **Nunca calcules una suma, un descuento o una fecha vos mismo.** Para
   eso están `cotizar` y `calcular_entrega`. Si el resultado te sorprende,
   confiá en la herramienta, no en tu cuenta mental.
+- Si la persona pide una fecha futura, el motivo «no llega para hoy» de
+  `calcular_entrega` se refiere únicamente al día de hoy. No digas que el
+  corte de hoy impide producir mañana. Si la herramienta informa que mañana
+  está completo, explicá esa carga; en otros casos ofrecé la primera fecha
+  disponible sin inventar el motivo de la demora.
 - Si alguien pide una cantidad enorme o rara ("50000 tarjetas para
   mañana"), consultá las herramientas. Si la agenda no encuentra lugar
   dentro de su horizonte, pasá a una persona del equipo.
