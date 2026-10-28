@@ -77,7 +77,7 @@ Cubren cotización, agenda, herramientas, panel, cliente de Chatwoot, canales, p
 
 ## Estado del proyecto
 
-Demo desplegada en un VPS con Coolify, HTTPS y Postgres, probada de punta a punta en una bandeja interna de Chatwoot (cotización, agenda, pedido, aviso de retiro, entrega y pausa humana). Los precios del catálogo y la política de pago son de ejemplo, y el repositorio no incluye datos reales del cliente. Ver [AUDITORIA-PLAN.md](AUDITORIA-PLAN.md) para el estado preciso y los pendientes.
+Demo desplegada en un VPS con Coolify, HTTPS y Postgres, probada de punta a punta en una bandeja interna de Chatwoot (cotización, agenda, pedido, aviso de retiro, entrega y pausa humana). Los precios del catálogo y la política de pago son de ejemplo, y el repositorio no incluye datos reales del cliente.
 
 ## Qué aprendí
 

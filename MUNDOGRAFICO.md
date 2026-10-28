@@ -19,8 +19,7 @@ las URLs de acceso se guardan fuera de Git.
 
 Los precios del catálogo y la política de pago son de ejemplo. La salida del
 bot advierte esto de forma obligatoria en la demo. Google Sheets todavía no
-está conectado. Ver el estado preciso y los pendientes en
-[`AUDITORIA-PLAN.md`](AUDITORIA-PLAN.md).
+está conectado.
 
 ## Qué es esto, en una imagen
 
@@ -87,7 +86,6 @@ servidor_mundografico.py  El entrypoint real (lo que corre el Dockerfile)
 prompts/sistema.md        Identidad, circuito de venta, reglas duras
 prompts/ejemplos.md       Vacío hasta transcribir los chats reales
 preparar_demo.py          Recoloca pedidos ficticios antes de cada presentación
-AUDITORIA-PLAN.md         Cumplimiento punto por punto y bloqueos externos
 GUION-DEMO.md              Guion de la demo para el cliente
 ```
 
