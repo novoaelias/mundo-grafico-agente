@@ -15,8 +15,7 @@ La aplicación ya corre en Coolify con HTTPS y Postgres. Chatwoot tiene una
 bandeja Telegram y otra de simulación interna; el webhook del agente está
 activo. Se probó en la bandeja interna el recorrido de cotización, agenda,
 pedido, aviso de retiro, entrega/cobro y pausa humana. Las credenciales y
-las URLs de acceso están en el archivo local protegido
-`<archivo local fuera del repo>`, fuera de Git.
+las URLs de acceso se guardan fuera de Git.
 
 Los precios del catálogo y la política de pago son de ejemplo. La salida del
 bot advierte esto de forma obligatoria en la demo. Google Sheets todavía no
@@ -88,7 +87,6 @@ servidor_mundografico.py  El entrypoint real (lo que corre el Dockerfile)
 prompts/sistema.md        Identidad, circuito de venta, reglas duras
 prompts/ejemplos.md       Vacío hasta transcribir los chats reales
 preparar_demo.py          Recoloca pedidos ficticios antes de cada presentación
-insumos/precios_pdf_para_validar.csv  Precios transcritos del PDF, aún sin unidad confirmada
 AUDITORIA-PLAN.md         Cumplimiento punto por punto y bloqueos externos
 GUION-DEMO.md              Guion de la demo para el cliente
 ```
@@ -207,9 +205,7 @@ ssh -L 5433:HOST_INTERNO_POSTGRES:PUERTO_POSTGRES usuario@tu-vps
 ## Lo que falta para producción (no para la demo)
 
 - Confirmar la unidad de facturación y si son precios finales en el PDF
-  de lonas/vinilos. Hay 32 variantes transcritas (29 con importe y 3 sin
-  importe) en `insumos/precios_pdf_para_validar.csv`; todavía no se cargaron como
-  precios confirmados. Los demás productos siguen como ejemplo.
+  de lonas/vinilos. Las variantes transcritas (no incluidas en este repositorio) todavía no se cargaron como precios confirmados. Los demás productos siguen como ejemplo.
 - Cargar las capturas de chat y transcribir sus ejemplos de venta en
   `prompts/ejemplos.md`. El agente los toma sin reiniciar.
 - WhatsApp oficial (Cloud API de Meta): el aviso de "pedido listo" casi
